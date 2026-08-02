@@ -3,7 +3,7 @@
  * FICHIER GÉNÉRÉ — NE PAS ÉDITER À LA MAIN.
  *
  * Source : `OPENAPI_OPERATIONS` du monorepo senndo, document version 1.0.0.
- * Régénérer : `pnpm --filter senndo generate`.
+ * Régénérer : `pnpm --filter @senndo/sdk generate`.
  *
  * Toute édition manuelle est effacée à la prochaine génération, et `generated-fresh.test.ts`
  * la signale en ROUGE avant même qu'elle atteigne une revue.

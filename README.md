@@ -10,10 +10,10 @@ Zéro dépendance. ESM et CommonJS. Types dérivés du contrat, pas recopiés.
 Le paquet est unique : les quatre gestionnaires installent le même artefact.
 
 ```bash
-npm install senndo
-pnpm add senndo
-bun add senndo
-yarn add senndo
+npm install @senndo/sdk
+pnpm add @senndo/sdk
+bun add @senndo/sdk
+yarn add @senndo/sdk
 ```
 
 Node ≥ 18 (pour `fetch` natif), ou n'importe quel runtime qui en fournit un — navigateur, Bun,

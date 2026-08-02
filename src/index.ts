@@ -2,7 +2,7 @@
  * senndo — SDK officiel TypeScript / JavaScript.
  *
  * ```ts
- * import { SenndoClient, newIdempotencyKey } from 'senndo'
+ * import { SenndoClient, newIdempotencyKey } from '@senndo/sdk'
  *
  * const senndo = new SenndoClient({ apiKey: process.env.SENNDO_API_KEY! })
  *

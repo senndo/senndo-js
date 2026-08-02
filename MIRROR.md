@@ -11,7 +11,7 @@ donnerait des fichiers qui échouent chez quiconque les lance.
 Installation :
 
 ```bash
-npm install senndo
+npm install @senndo/sdk
 ```
 
 Les rapports de bug et les demandes d'évolution sont les bienvenus dans les *issues* de ce dépôt.
