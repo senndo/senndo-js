@@ -25,7 +25,7 @@ export const SENNDO_CONTRACT_VERSION = '1.0.0'
 export type Channel = 'sms' | 'whatsapp_cloud' | 'whatsapp_baileys' | 'email' | 'voice'
 
 export type MessageStatus =
-  'pending' | 'dispatching' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed'
+  'pending' | 'dispatching' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'unknown'
 
 /**
  * Raison NORMALISÉE d'un échec, propre à senndo et indépendante de l'opérateur.
@@ -187,21 +187,21 @@ export type SendMessageResponse = {
   /**
    * Expéditeur affiché, résolu.
    */
-  senderId?: string | null
+  senderId: string | null
   /**
    * Règle de routage retenue. Identifiant opaque, utile au support ; il ne nomme aucun
    * fournisseur.
    */
-  routeRuleId?: string | null
+  routeRuleId: string | null
   /**
    * Montant débité en USD, chaîne décimale. null avec une clé sk_test_ (aucun mouvement
    * d’argent).
    */
-  billedAmountUsd?: string | null
+  billedAmountUsd: string | null
   /**
    * Devise de facturation.
    */
-  billedCurrency?: string | null
+  billedCurrency: string | null
   /**
    * true quand la clé d’idempotence avait DÉJÀ produit ce message : aucun nouveau débit n’a eu
    * lieu, et le corps décrit l’envoi d’origine.
@@ -226,11 +226,11 @@ export type GetMessageResponse = {
   /**
    * Destinataire.
    */
-  toAddr?: string | null
+  toAddr: string | null
   /**
    * Expéditeur affiché.
    */
-  senderId?: string | null
+  senderId: string | null
   /**
    * Statut courant.
    */
@@ -238,7 +238,7 @@ export type GetMessageResponse = {
   /**
    * Montant facturé en USD, chaîne décimale. null si non facturé (clé de test).
    */
-  billedAmountUsd?: string | null
+  billedAmountUsd: string | null
   /**
    * Crédit RENDU par un contre-passage, en USD, chaîne décimale. null si le message n’a pas été
    * contre-passé. billedAmountUsd garde le montant BRUT débité (un fait qui s’est produit,
@@ -246,30 +246,30 @@ export type GetMessageResponse = {
    * reversedAmountUsd. Sommer billedAmountUsd seul SURESTIME la dépense de tout ce qui a été
    * remboursé.
    */
-  reversedAmountUsd?: string | null
+  reversedAmountUsd: string | null
   /**
    * Raison de l’échec. Renseignée sur TOUT message status: "failed", et null sur tout autre
    * statut. Code stable propre à senndo, indépendant de l’opérateur : branchez votre logique
    * dessus. PROVIDER_REFUSED est le fourre-tout explicite — le canal a refusé sans raison
    * normalisable.
    */
-  failureCode?: FailureCode | null
+  failureCode: FailureCode | null
   /**
    * Devise de facturation.
    */
-  billedCurrency?: string | null
+  billedCurrency: string | null
   /**
    * Catégorie déclarée à l’envoi.
    */
-  category?: string | null
+  category: string | null
   /**
    * Corps du message tel qu’envoyé (après translittération éventuelle).
    */
-  body?: string
+  body: string
   /**
    * Origine de l’envoi : console, appel par clé API, ou test du parcours de démarrage.
    */
-  source?: 'console' | 'api' | 'api_test'
+  source: 'console' | 'api' | 'api_test'
 }
 
 /** Paramètres de requête de `GET /v1/messages`. */
@@ -351,11 +351,11 @@ export type ListMessagesResponse = {
     /**
      * Destinataire.
      */
-    toAddr?: string | null
+    toAddr: string | null
     /**
      * Expéditeur affiché.
      */
-    senderId?: string | null
+    senderId: string | null
     /**
      * Statut courant.
      */
@@ -363,7 +363,7 @@ export type ListMessagesResponse = {
     /**
      * Montant facturé en USD, chaîne décimale. null si non facturé (clé de test).
      */
-    billedAmountUsd?: string | null
+    billedAmountUsd: string | null
     /**
      * Crédit RENDU par un contre-passage, en USD, chaîne décimale. null si le message n’a pas été
      * contre-passé. billedAmountUsd garde le montant BRUT débité (un fait qui s’est produit,
@@ -371,30 +371,30 @@ export type ListMessagesResponse = {
      * reversedAmountUsd. Sommer billedAmountUsd seul SURESTIME la dépense de tout ce qui a été
      * remboursé.
      */
-    reversedAmountUsd?: string | null
+    reversedAmountUsd: string | null
     /**
      * Raison de l’échec. Renseignée sur TOUT message status: "failed", et null sur tout autre
      * statut. Code stable propre à senndo, indépendant de l’opérateur : branchez votre logique
      * dessus. PROVIDER_REFUSED est le fourre-tout explicite — le canal a refusé sans raison
      * normalisable.
      */
-    failureCode?: FailureCode | null
+    failureCode: FailureCode | null
     /**
      * Devise de facturation.
      */
-    billedCurrency?: string | null
+    billedCurrency: string | null
     /**
      * Catégorie déclarée à l’envoi.
      */
-    category?: string | null
+    category: string | null
     /**
      * Corps du message tel qu’envoyé (après translittération éventuelle).
      */
-    body?: string
+    body: string
     /**
      * Origine de l’envoi : console, appel par clé API, ou test du parcours de démarrage.
      */
-    source?: 'console' | 'api' | 'api_test'
+    source: 'console' | 'api' | 'api_test'
   }>
 }
 
@@ -476,7 +476,7 @@ export type ListMediaResponse = {
      * URL d’aperçu signée et TEMPORAIRE, sur les images uniquement. null quand l’aperçu n’a pas pu
      * être signé — une liste ne tombe jamais pour un aperçu.
      */
-    previewUrl?: string | null
+    previewUrl: string | null
   }>
   /**
    * Page courante.
@@ -520,7 +520,7 @@ export type ListMediaResponse = {
     /**
      * Cycle de facturation en cours. null tant qu’aucun cycle n’a été mesuré.
      */
-    cycle?: {
+    cycle: {
       /**
        * Période, AAAA-MM.
        */
@@ -544,7 +544,7 @@ export type ListMediaResponse = {
       /**
        * Dernière mesure.
        */
-      updatedAt?: string | null
+      updatedAt: string | null
     } | null
   }
 }
@@ -597,7 +597,7 @@ export type ListPricesResponse = {
      * Compte enfant visé par une dérogation. null = le tarif par défaut appliqué à tous vos
      * enfants.
      */
-    buyerAccountId?: string | null
+    buyerAccountId: string | null
   }>
 }
 
@@ -805,12 +805,12 @@ export type EstimateMessageResponse = {
   /**
    * La translittération GSM-7 est active pour cette route — indépendant du texte soumis.
    */
-  transliterateGsm7?: boolean
+  transliterateGsm7: boolean
   /**
    * Le texte A ÉTÉ modifié avant segmentation : le destinataire ne verra pas exactement ce que
    * vous avez soumis. Signalez-le à vos utilisateurs.
    */
-  transliterated?: boolean
+  transliterated: boolean
   /**
    * Prix unitaire du compte, chaîne décimale USD — SUB-CENTIME : l’arrondir à deux décimales le
    * rend nul.
@@ -880,19 +880,19 @@ export type ListLedgerResponse = {
     /**
      * Solde après écriture.
      */
-    balanceAfter?: string | null
+    balanceAfter: string | null
     /**
      * Canal du message lié, null sans message.
      */
-    channel?: string | null
+    channel: string | null
     /**
      * Destinataire du message lié.
      */
-    toAddr?: string | null
+    toAddr: string | null
     /**
      * Statut du message lié.
      */
-    status?: string | null
+    status: string | null
     /**
      * Référence de paiement (SENNDO-AAMMJJ-N) quand l’écriture EST une recharge — c’est la clé du
      * reçu. Null partout ailleurs, y compris sur la ligne de bonus, qui partage la référence du
@@ -915,7 +915,7 @@ export type ListLedgerResponse = {
     /**
      * Solde à l’écriture la plus récente de la vue.
      */
-    closingBalanceUsd?: string | null
+    closingBalanceUsd: string | null
   }
 }
 
@@ -1007,7 +1007,7 @@ export type ListInboxMessagesResponse = {
     /**
      * Émetteur.
      */
-    fromAddr?: string | null
+    fromAddr: string | null
     /**
      * Destinataire.
      */
@@ -1067,7 +1067,7 @@ export type ListWaTemplatesResponse = {
     /**
      * Pied de page.
      */
-    footer?: string
+    footer: string
     /**
      * Valeurs d’exemple des variables du corps, dans l’ordre — celles soumises à la revue Meta.
      * Elles ne sont PAS envoyées : à l’envoi, vous fournissez les vôtres.
@@ -1175,7 +1175,7 @@ export type ListWaCloudNumbersResponse = {
     /**
      * Numéro affiché.
      */
-    displayNumber?: string | null
+    displayNumber: string
     /**
      * Un token est enregistré (sa valeur ne sort jamais).
      */
@@ -1248,7 +1248,7 @@ export type ListWebhooksResponse = {
     /**
      * Révocation — null tant que l’endpoint est actif.
      */
-    revokedAt?: string | null
+    revokedAt: string | null
     /**
      * Création.
      */
@@ -1387,22 +1387,22 @@ export type ListWebhookDeliveriesResponse = {
     /**
      * Statut HTTP renvoyé par VOTRE serveur.
      */
-    httpStatus?: number | null
+    httpStatus: number | null
     /**
      * Erreur de transport.
      */
-    error?: string | null
+    error: string | null
     /**
      * Durée de l’appel, en millisecondes ; null si la tentative n’a jamais abouti à une réponse.
      * C’est ce qui distingue « votre serveur a refusé » de « votre serveur n’a pas répondu à temps
      * ».
      */
-    durationMs?: number | null
+    durationMs: number | null
     /**
      * La livraison porte un événement émis par une clé de test. Un endpoint reçoit les DEUX : ce
      * drapeau est ce qui permet de les distinguer côté client.
      */
-    testMode?: boolean
+    testMode: boolean
     /**
      * Tentative.
      */
@@ -1411,7 +1411,7 @@ export type ListWebhookDeliveriesResponse = {
      * Horodatage de l’issue TERMINALE (succès ou échec définitif) ; null tant que la livraison est
      * en attente ou en retentative.
      */
-    deliveredAt?: string | null
+    deliveredAt: string | null
   }>
 }
 
