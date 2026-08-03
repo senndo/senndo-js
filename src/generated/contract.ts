@@ -660,11 +660,27 @@ export type ListCurrenciesResponse = {
 
 /** Réponse 200 de `GET /v1/sender-ids`. */
 export type ListSenderIdsResponse = {
+  /**
+   * Réservé à la console : true pour une session d’opérateur plateforme, qui voit alors la file
+   * de revue. TOUJOURS false pour une clé API — le périmètre élargi est attaché à la SESSION,
+   * jamais au compte.
+   */
+  canReview: boolean
   senderIds: Array<{
     /**
      * Identifiant.
      */
     id: string
+    /**
+     * Compte propriétaire, ou null pour un expéditeur partagé de la plateforme. Une clé API ne
+     * voit jamais que ses propres dédiés et les partagés : cette valeur ne désigne donc jamais un
+     * tiers.
+     */
+    ownerAccountId: string | null
+    /**
+     * Nom du compte propriétaire ; null pour un partagé.
+     */
+    ownerName: string | null
     /**
      * L’expéditeur tel qu’il s’envoie (à passer en senderId sur POST /v1/messages).
      */
@@ -681,6 +697,37 @@ export type ListSenderIdsResponse = {
      * Cycle de vie. Seul active permet d’envoyer.
      */
     lifecycleStatus: 'active' | 'suspended' | 'archived'
+    /**
+     * Motif de la suspension en cours ; null hors suspension. À afficher à vos utilisateurs : sans
+     * lui, leurs envois échouent sans explication.
+     */
+    suspensionReason: string | null
+    /**
+     * Horodatage ISO 8601 de la suspension en cours, sinon null.
+     */
+    suspendedAt: string | null
+    /**
+     * Horodatage ISO 8601 de l’archivage, sinon null.
+     */
+    archivedAt: string | null
+    /**
+     * Horodatage ISO 8601 de création.
+     */
+    createdAt: string
+    /**
+     * Vérification de l’adresse, canal e-mail UNIQUEMENT ; null sur tout autre canal. Un
+     * expéditeur e-mail dont le statut n’est pas verified ne délivre pas.
+     */
+    verification: {
+      /**
+       * État de la vérification de l’adresse.
+       */
+      status: 'pending' | 'verified' | 'failed'
+      /**
+       * Horodatage ISO 8601 du passage à verified, sinon null.
+       */
+      confirmedAt: string | null
+    } | null
     /**
      * Approbation par pays. Une destination absente de cette liste n’est pas approuvée.
      */
@@ -846,6 +893,12 @@ export type ListLedgerResponse = {
      * Statut du message lié.
      */
     status?: string | null
+    /**
+     * Référence de paiement (SENNDO-AAMMJJ-N) quand l’écriture EST une recharge — c’est la clé du
+     * reçu. Null partout ailleurs, y compris sur la ligne de bonus, qui partage la référence du
+     * crédit principal.
+     */
+    receiptRef?: string | null
   }>
   /**
    * Totaux de la vue FILTRÉE, calculés par le serveur.
@@ -986,9 +1039,19 @@ export type ListWaTemplatesResponse = {
      */
     language: string
     /**
-     * Catégorie Meta.
+     * Catégorie à utiliser : l’effective si Meta l’a tranchée, sinon la demandée. C’est celle-ci
+     * qu’il faut lire — les deux autres n’existent que pour comprendre un reclassement.
      */
     category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
+    /**
+     * Catégorie DEMANDÉE à la soumission.
+     */
+    requestedCategory: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
+    /**
+     * Catégorie RETENUE par Meta ; null tant qu’il n’a pas tranché. Meta reclasse — un modèle
+     * demandé en UTILITY et retenu en MARKETING ne coûte pas le même prix.
+     */
+    effectiveCategory: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | null
     /**
      * Seul approved est envoyable.
      */
@@ -1005,6 +1068,93 @@ export type ListWaTemplatesResponse = {
      * Pied de page.
      */
     footer?: string
+    /**
+     * Valeurs d’exemple des variables du corps, dans l’ordre — celles soumises à la revue Meta.
+     * Elles ne sont PAS envoyées : à l’envoi, vous fournissez les vôtres.
+     */
+    bodyExamples: Array<string>
+    /**
+     * Motif du refus Meta ; chaîne vide quand le modèle n’a pas été refusé.
+     */
+    rejectionReason: string
+    /**
+     * Note de qualité Meta, INDÉPENDANTE du statut ; null tant que le modèle n’a jamais été noté.
+     * Un modèle approuvé passé en RED est en voie d’être mis en pause par Meta.
+     */
+    quality: 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN' | null
+    /**
+     * Provenance du modèle. Métadonnée d’exploitation, sans effet sur l’envoi.
+     */
+    source: 'builder' | 'library' | 'synced' | 'manual'
+    /**
+     * Horodatage ISO 8601 de création.
+     */
+    createdAt: string
+    /**
+     * Horodatage ISO 8601 de la dernière modification.
+     */
+    updatedAt: string
+    /**
+     * En-tête du modèle. type vaut none (aucun en-tête), text (texte figé), ou image / video /
+     * document — un en-tête MÉDIA ne fige que le FORMAT : le média réel se fournit à CHAQUE envoi,
+     * dans le paramètre header. Les champs présents dépendent du type ; seul type est garanti.
+     */
+    header: {
+      /**
+       * Nature de l’en-tête.
+       */
+      type: 'none' | 'text' | 'image' | 'video' | 'document'
+      /**
+       * Texte figé de l’en-tête (type text uniquement), au plus une variable.
+       */
+      text?: string
+      /**
+       * Valeur d’exemple de la variable d’en-tête, quand il y en a une.
+       */
+      example?: string
+      /**
+       * Handle d’échantillon Meta exigé à la soumission d’un en-tête média. Sans usage à l’envoi.
+       */
+      exampleHandle?: string
+    }
+    /**
+     * Boutons du modèle, DANS L’ORDRE — leur index est ce que Meta attend à l’envoi. Un bouton
+     * copy_code ou otp signale un modèle qui attend un CODE ; un bouton url dont l’URL porte une
+     * variable en attend un paramètre à chaque envoi. En omettre un fait échouer l’envoi APRÈS le
+     * débit.
+     */
+    buttons: Array<{
+      /**
+       * Nature du bouton.
+       */
+      type: 'quick_reply' | 'url' | 'phone_number' | 'copy_code' | 'otp'
+      /**
+       * Libellé affiché ; absent d’un bouton copy_code.
+       */
+      text?: string
+      /**
+       * Destination d’un bouton url. Une variable {{n}} y impose un paramètre à l’envoi.
+       */
+      url?: string
+      /**
+       * Numéro appelé par un bouton phone_number.
+       */
+      phoneNumber?: string
+      /**
+       * Valeur d’exemple d’un bouton copy_code.
+       */
+      example?: string
+      /**
+       * Forme d’OTP exigée par Meta (bouton otp uniquement).
+       */
+      otpType?: 'copy_code' | 'one_tap' | 'zero_tap'
+      /**
+       * Position 1-based de la variable de CORPS qui porte le code. Meta exige que le code figure
+       * dans le corps ET dans le bouton : la valeur du bouton est la recopie de cette variable,
+       * jamais une saisie de plus. Absent = 1.
+       */
+      codeVariable?: number
+    }>
   }>
 }
 
@@ -1044,17 +1194,35 @@ export type ListWaCloudNumbersResponse = {
    */
   sharedSenders: Array<{
     /**
+     * Nature de l’émetteur partagé. C’est elle qui dit COMMENT il s’identifie : le Cloud par son
+     * nom vérifié, le Baileys par son numéro appairé.
+     */
+    kind: 'whatsapp_cloud' | 'whatsapp_baileys'
+    /**
      * Canal servi.
      */
     channel: string
     /**
-     * Nom vérifié affiché au destinataire (WhatsApp Cloud).
+     * Nom vérifié affiché au destinataire (WhatsApp Cloud). TOUJOURS null pour un émetteur Baileys
+     * : le nom vérifié est un concept Cloud, et un message Baileys arrive avec le NUMÉRO.
      */
-    verifiedName?: string | null
+    verifiedName: string | null
     /**
-     * Numéro appairé.
+     * Numéro appairé, tel que le destinataire le verra. TOUJOURS null côté Cloud — le numéro
+     * plateforme reste un secret. Côté Baileys, null seulement dans la fenêtre où la session est
+     * connectée mais où le numéro n’a pas encore été remonté.
      */
-    pairedNumber?: string | null
+    pairedNumber: string | null
+    /**
+     * Toujours true : un émetteur partagé sert les envois À SENS UNIQUE (codes, alertes,
+     * notifications). Les réponses des destinataires ne vous reviennent pas.
+     */
+    oneWay: boolean
+    /**
+     * Poignée de désignation de l’émetteur Baileys partagé, absente de l’entrée Cloud. Ce n’est
+     * pas un credential : le partagé est ouvert à tout compte.
+     */
+    sessionId?: string
   }>
 }
 
@@ -1123,6 +1291,12 @@ export type CreateWebhookResponse = {
    * Événements souscrits.
    */
   events: Array<string>
+  /**
+   * Toujours null ici : l’endpoint vient d’être créé. Le champ est présent pour que la réponse
+   * de création ait la MÊME forme qu’une ligne de GET /v1/webhooks, et qu’un client puisse la
+   * ranger dans sa liste sans cas particulier.
+   */
+  revokedAt: string | null
   /**
    * Création.
    */
@@ -1219,9 +1393,25 @@ export type ListWebhookDeliveriesResponse = {
      */
     error?: string | null
     /**
+     * Durée de l’appel, en millisecondes ; null si la tentative n’a jamais abouti à une réponse.
+     * C’est ce qui distingue « votre serveur a refusé » de « votre serveur n’a pas répondu à temps
+     * ».
+     */
+    durationMs?: number | null
+    /**
+     * La livraison porte un événement émis par une clé de test. Un endpoint reçoit les DEUX : ce
+     * drapeau est ce qui permet de les distinguer côté client.
+     */
+    testMode?: boolean
+    /**
      * Tentative.
      */
     createdAt: string
+    /**
+     * Horodatage de l’issue TERMINALE (succès ou échec définitif) ; null tant que la livraison est
+     * en attente ou en retentative.
+     */
+    deliveredAt?: string | null
   }>
 }
 
