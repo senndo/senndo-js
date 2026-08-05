@@ -3,6 +3,20 @@
 Ce paquet suit le [versionnage sémantique](https://semver.org/lang/fr/). Depuis `1.0.0`, la
 surface publique est STABLE : elle ne casse qu'à une majeure.
 
+## 1.0.1 — 2026-08-05
+
+**Si vous avez installé `1.0.0`, mettez à jour.** Le tarball npm de `1.0.0` embarquait un `dist/`
+périmé de deux jours : son manifeste annonçait `1.0.0`, son code disait `0.1.3` et ne portait PAS
+le refus de redirection — la version publiée POUR corriger ce défaut le contenait donc toujours.
+Aucun `prepublishOnly` n'existait, donc `npm publish` a expédié le build qui traînait sur le
+disque. `1.0.0` est déprécié sur npm.
+
+Un `prepublishOnly` reconstruit désormais le `dist/` et `scripts/assert-dist-fresh.mjs` refuse la
+publication si le build ne correspond pas aux sources — par la version compilée, et par
+l'horodatage pour le cas d'un correctif sans changement de version.
+
+Aucun changement de code par rapport à `1.0.0` : seuls le build et la garde de publication.
+
 ## 1.0.0 — 2026-08-05
 
 Première version **stable**. senndo passe en v1 et le SDK suit : les 20 opérations de la surface
