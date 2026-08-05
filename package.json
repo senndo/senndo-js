@@ -1,7 +1,7 @@
 {
   "//name": "SCOPÉ, ET PAS PAR CHOIX ESTHÉTIQUE : npm refuse « senndo » en publication (garde anti-typosquat, « trop proche du paquet existant send »). Le nom était libre à la lecture, bloqué à l'écriture. Un nom scopé n'est jamais comparé à un nom nu, et la portée « @senndo » réserve la place des paquets à venir (CLI, adaptateurs).",
   "name": "@senndo/sdk",
-  "version": "0.1.3",
+  "version": "1.0.0",
   "description": "Official TypeScript / JavaScript SDK for the senndo messaging and verification API.",
   "license": "MIT",
   "type": "module",

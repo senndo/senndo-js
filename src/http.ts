@@ -235,6 +235,14 @@ export const performRequest = async <T>(
       response = await config.fetchImpl(url, {
         method: descriptor.method,
         headers,
+        // JAMAIS de suivi de redirection (audit batch 2026-08-05). `fetch` suit par défaut et
+        // DÉGRADE un POST en GET sur 301/302 (spec). Or `POST /v1/messages` (envoyer) et
+        // `GET /v1/messages` (lire le journal) partagent le chemin : un 301 sur l'hôte d'API —
+        // une redirection http→https de bord suffit — transformait un ENVOI FACTURÉ en lecture,
+        // rendue à l'appelant comme un succès. C'est exactement le non-négociable 2 : un statut
+        // ne se déduit jamais d'un 2xx. Échouer bruyamment est le seul comportement sûr ; la
+        // base d'URL se corrige dans la configuration, pas en silence à l'exécution.
+        redirect: 'error',
         ...(payload === undefined ? {} : { body: payload }),
         ...(controller === null ? {} : { signal: controller.signal }),
       })

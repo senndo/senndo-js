@@ -34,6 +34,14 @@ export interface RequestInitLike {
   headers: Record<string, string>
   body?: string | Uint8Array
   signal?: AbortSignalLike
+  /**
+   * Politique de redirection. Le SDK passe TOUJOURS `'error'` (audit batch 2026-08-05) : `fetch`
+   * suit par défaut et dégrade un POST en GET sur 301/302, ce qui transformait un envoi FACTURÉ
+   * en lecture du journal rendue comme un succès (`POST` et `GET /v1/messages` partagent le
+   * chemin). Ce type narrow OMETTAIT le champ — c'est en partie pourquoi le défaut par défaut
+   * n'avait jamais été considéré : on ne choisit pas ce qu'on ne peut pas exprimer.
+   */
+  redirect?: 'error' | 'follow' | 'manual'
 }
 
 /** Toute implémentation compatible `fetch`. La native de la plateforme convient. */

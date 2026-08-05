@@ -770,6 +770,11 @@ export interface EstimateMessageBody {
    * Le message portera une pièce jointe (même règle d’unité qu’au débit).
    */
   hasAttachment?: boolean
+  /**
+   * Type de SMS (canal "sms" uniquement) — DOIT valoir celui de l’envoi réel, sinon le devis
+   * annonce un prix que le débit ne respectera pas. Absent = "standard".
+   */
+  tier?: 'standard' | 'premium'
 }
 
 /** Réponse 200 de `POST /v1/messages/estimate`. */
@@ -835,7 +840,18 @@ export interface ListLedgerQuery {
   /**
    * Filtre par type d’écriture (topup, debit_send, reversal…).
    */
-  kind?: string
+  kind?:
+    | 'topup'
+    | 'topup_bonus'
+    | 'debit_send'
+    | 'debit_storage'
+    | 'debit_ai'
+    | 'margin'
+    | 'provider_cost'
+    | 'withdrawal'
+    | 'adjustment'
+    | 'reversal'
+    | 'transfer'
   /**
    * Date de début (YYYY-MM-DD), incluse.
    */
@@ -964,7 +980,7 @@ export type ListInboxThreadsResponse = {
 /** Paramètres de requête de `GET /v1/inbox/messages`. */
 export interface ListInboxMessagesQuery {
   /**
-   * Canal du fil (whatsapp_cloud | whatsapp_baileys).
+   * Canal du fil (whatsapp_cloud | whatsapp_baileys | sms).
    */
   channel: string
   /**
@@ -1332,7 +1348,7 @@ export interface ListWebhookDeliveriesQuery {
   /**
    * Filtre d’issue : pending | failed_retrying | succeeded | failed_permanent.
    */
-  status?: string
+  status?: 'pending' | 'failed_retrying' | 'succeeded' | 'failed_permanent'
 }
 
 /** Réponse 200 de `GET /v1/webhooks/deliveries`. */
