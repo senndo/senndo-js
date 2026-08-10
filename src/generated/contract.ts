@@ -28,6 +28,21 @@ export type MessageStatus =
   'pending' | 'dispatching' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'unknown'
 
 /**
+ * Code pays ISO 3166-1 alpha-3, en majuscules (« CIV », « FRA », « SEN ») — le format du
+ * moteur de routage. Un code que le catalogue ne connaît pas est REFUSÉ, jamais ignoré : il ne
+ * pourrait matcher aucune règle, et l’appel retomberait en silence sur la route par défaut, à
+ * un prix que vous n’avez pas demandé.
+ */
+export type CountryIso3 = string
+
+/**
+ * Code pays ISO 3166-1 alpha-2, en majuscules (« CI », « FR », « SN ») — le format des
+ * approbations d’émetteur. À ne pas confondre avec l’alpha-3 attendu par les champs de
+ * routage.
+ */
+export type CountryAlpha2 = string
+
+/**
  * Raison NORMALISÉE d'un échec, propre à senndo et indépendante de l'opérateur.
  *
  * L'UNION EST OUVERTE (`| (string & {})`), ET C'EST DÉLIBÉRÉ. senndo s'engage à AJOUTER des
@@ -147,9 +162,12 @@ export interface SendMessageBody {
    */
   senderId?: string
   /**
-   * Override du pays de routage (code ISO3).
+   * Override du pays de routage, en ISO 3166-1 alpha-3 (« CIV », « FRA »). Absent, le pays est
+   * DÉRIVÉ du destinataire. Un code inconnu du catalogue est refusé en 400 (COUNTRY_INVALID)
+   * avant tout débit : il ne pourrait matcher aucune règle de routage, et l’envoi partirait —
+   * facturé — sur la route par défaut.
    */
-  country?: string
+  country?: CountryIso3
   /**
    * Catégorie du message.
    */
@@ -159,6 +177,30 @@ export interface SendMessageBody {
    * délivrabilité et se facture au tarif premium ; absent = "standard".
    */
   tier?: 'standard' | 'premium'
+  /**
+   * Convertit le texte en GSM-7 avant segmentation, envoi et facturation (canal "sms"
+   * uniquement). Un SEUL caractère hors de l’alphabet GSM 03.38 fait passer le message entier en
+   * UCS-2 et divise la capacité par plus de deux (160 → 70 caractères) : l’apostrophe
+   * typographique ’ (U+2019), que la plupart des éditeurs substituent automatiquement, suffit à
+   * tripler la facture. Avec ce drapeau, les apostrophes et tirets typographiques sont remplacés
+   * par leur équivalent ASCII, les lettres accentuées hors alphabet (ê â î ô û ç œ) perdent leur
+   * accent, et les emoji sont RETIRÉS — le destinataire ne verra donc pas exactement ce que vous
+   * avez soumis. Absent = le texte est envoyé tel quel. Vérifiez le résultat avec POST
+   * /v1/messages/estimate avant d’envoyer.
+   */
+  convertGsm7?: boolean
+  /**
+   * Résout les champs {{clé}} du texte contre le catalogue de champs du compte (GET
+   * /v1/merge-fields) et le contact correspondant à la destination, AVANT toute facturation. Le
+   * message envoyé, segmenté et facturé est le texte SUBSTITUÉ — pas le gabarit. Un champ absent
+   * du catalogue rend 400 UNKNOWN_MERGE_FIELD ; un champ sans valeur pour ce destinataire rend
+   * 422 MISSING_MERGE_FIELD et RIEN n’est facturé (mieux vaut ne pas envoyer qu’envoyer «
+   * Bonjour , »). Absent = le texte part tel quel, accolades comprises : un corps qui contient
+   * légitimement {{ }} n’est jamais modifié sans ce drapeau. Incompatible avec template (les
+   * variables de modèle {{1}}, {{2}}… sont un espace de noms distinct). Devisez sous le même
+   * drapeau avec POST /v1/messages/estimate.
+   */
+  personalize?: boolean
   /**
    * Objet — requis pour channel: "email".
    */
@@ -202,6 +244,12 @@ export type SendMessageResponse = {
    * Devise de facturation.
    */
   billedCurrency: string | null
+  /**
+   * Crédit RENDU par un contre-passage déclenché pendant cet appel, en USD, chaîne décimale.
+   * null si le message n’a pas été contre-passé. billedAmountUsd garde le montant BRUT débité :
+   * la dépense NETTE est billedAmountUsd − reversedAmountUsd.
+   */
+  reversedAmountUsd: string | null
   /**
    * true quand la clé d’idempotence avait DÉJÀ produit ce message : aucun nouveau débit n’a eu
    * lieu, et le corps décrit l’envoi d’origine.
@@ -733,9 +781,10 @@ export type ListSenderIdsResponse = {
      */
     countries: Array<{
       /**
-       * Pays, en ISO 3166-1 alpha-2.
+       * Pays, en ISO 3166-1 alpha-2 (« CI », « FR »). Ce champ N’EST PAS dans le même système que le
+       * `country` des envois et des devis, qui est en alpha-3.
        */
-      country: string
+      country: CountryAlpha2
       /**
        * Statut dans ce pays.
        */
@@ -763,9 +812,13 @@ export interface EstimateMessageBody {
    */
   senderId?: string | null
   /**
-   * Destination ISO 3166-1 alpha-2. Le devis résout au niveau PAYS.
+   * Destination en ISO 3166-1 alpha-3 (« CIV », « FRA ») — le MÊME système que le `country` de
+   * l’envoi, parce que c’est la même cascade de routage qui résout les deux. Le devis résout au
+   * niveau PAYS. Un code inconnu du catalogue est refusé en 400 (COUNTRY_INVALID) : il ne
+   * pourrait matcher aucune règle, et le devis annoncerait le prix de la route par défaut — pas
+   * celui qui sera débité.
    */
-  country?: string | null
+  country?: CountryIso3 | null
   /**
    * Le message portera une pièce jointe (même règle d’unité qu’au débit).
    */
@@ -775,6 +828,26 @@ export interface EstimateMessageBody {
    * annonce un prix que le débit ne respectera pas. Absent = "standard".
    */
   tier?: 'standard' | 'premium'
+  /**
+   * Conversion GSM-7 (canal "sms" uniquement) — DOIT valoir celle de l’envoi réel, sinon le
+   * devis annonce un nombre de segments que le débit ne respectera pas. Le champ transliterated
+   * de la réponse dit si le texte A ÉTÉ modifié.
+   */
+  convertGsm7?: boolean
+  /**
+   * Devise les corps SUBSTITUÉS plutôt que le gabarit — DOIT valoir celui de l’envoi réel. Exige
+   * destinations : sans destinataires concrets il n’y a aucune valeur à substituer, donc aucun
+   * devis exact possible (400). La substitution fait varier la longueur, donc les segments, donc
+   * le prix : deviser le gabarit SOUS-facture dès qu’une valeur est plus longue que sa clé.
+   */
+  personalize?: boolean
+  /**
+   * Les destinataires concrets (numéros E.164, ou adresses sur le canal "email"), 1 000 au plus.
+   * Requis quand personalize vaut true. Un destinataire à qui il manque une valeur est EXCLU du
+   * devis — c’est celui que l’envoi refusera, donc celui qui ne sera pas facturé : comparez
+   * personalized.recipients au nombre soumis pour savoir combien seront écartés.
+   */
+  destinations?: Array<string>
 }
 
 /** Réponse 200 de `POST /v1/messages/estimate`. */
@@ -822,9 +895,31 @@ export type EstimateMessageResponse = {
    */
   unitPriceUsd: string
   /**
-   * Total exact : units × recipients × unitPriceUsd.
+   * Total exact. Sans personalize : units × recipients × unitPriceUsd. Avec personalize : la
+   * SOMME des unités de chaque corps substitué × unitPriceUsd — jamais une moyenne.
    */
   totalUsd: string
+  /**
+   * Présent UNIQUEMENT quand personalize vaut true. Les scalaires de tête (encoding, chars,
+   * segments, units) décrivent alors le PIRE destinataire, jamais la moyenne : ils bornent par
+   * le haut ce qu’un destinataire coûtera.
+   */
+  personalized?: {
+    /**
+     * Destinataires dont TOUS les champs se sont résolus — les seuls comptés dans totalUsd.
+     * L’écart avec le nombre de destinations soumises est le nombre d’envois que
+     * MISSING_MERGE_FIELD refusera.
+     */
+    recipients: number
+    /**
+     * Unités du destinataire le MOINS cher.
+     */
+    minUnits: number
+    /**
+     * Unités du destinataire le PLUS cher.
+     */
+    maxUnits: number
+  }
 }
 
 /** Paramètres de requête de `GET /v1/ledger`. */
@@ -860,6 +955,23 @@ export interface ListLedgerQuery {
    * Date de fin (YYYY-MM-DD), incluse.
    */
   to?: string
+  /**
+   * Colonne de tri.
+   */
+  sort?: 'date' | 'amount' | 'kind' | 'channel' | 'balance'
+  /**
+   * Sens du tri.
+   */
+  dir?: 'asc' | 'desc'
+  /**
+   * Filtre par canal du message rattaché.
+   */
+  channel?: Channel
+  /**
+   * Recherche libre : clé d’idempotence ou destination (correspondance partielle), ou référence
+   * exacte si le terme est un UUID.
+   */
+  q?: string
 }
 
 /** Réponse 200 de `GET /v1/ledger`. */
@@ -982,7 +1094,7 @@ export interface ListInboxMessagesQuery {
   /**
    * Canal du fil (whatsapp_cloud | whatsapp_baileys | sms).
    */
-  channel: string
+  channel: 'whatsapp_baileys' | 'whatsapp_cloud' | 'sms'
   /**
    * Correspondant du fil.
    */
@@ -1588,7 +1700,7 @@ export const OPERATIONS = {
     method: 'GET',
     path: '/v1/ledger',
     pathParams: [],
-    queryParams: ['page', 'pageSize', 'kind', 'from', 'to'],
+    queryParams: ['page', 'pageSize', 'kind', 'from', 'to', 'sort', 'dir', 'channel', 'q'],
     requiredQueryParams: [],
     requiredBodyFields: [],
     contentType: null,

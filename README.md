@@ -193,7 +193,7 @@ const emetteursDuCompte = await senndo.listSenderIds()
 const utilisables = emetteursDuCompte.senderIds.filter(
   (emetteur) =>
     emetteur.lifecycleStatus === 'active' &&
-    emetteur.countries.some((pays) => pays.country === 'FRA' && pays.status === 'approved'),
+    emetteur.countries.some((pays) => pays.country === 'FR' && pays.status === 'approved'),
 )
 ```
 

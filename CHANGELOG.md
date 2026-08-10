@@ -3,6 +3,56 @@
 Ce paquet suit le [versionnage sémantique](https://semver.org/lang/fr/). Depuis `1.0.0`, la
 surface publique est STABLE : elle ne casse qu'à une majeure.
 
+## 1.0.2 — 2026-08-10
+
+**Si vous filtrez des Sender IDs par pays, mettez à jour votre code.** Le README publié avec
+`1.0.1` donnait cet exemple :
+
+```ts
+emetteur.countries.some((pays) => pays.country === 'FRA' && pays.status === 'approved')
+```
+
+`countries[].country` est en ISO 3166-1 **alpha-2**, pas alpha-3 : ce filtre rendait
+systématiquement une liste vide, sans erreur. Le bon code est `'FR'`. L'extrait est corrigé, et un
+gate vérifie désormais chaque littéral pays des extraits contre le système de codes du champ
+auquel il s'applique — il aurait refusé `'FRA'`.
+
+### Ajouté — deux alias qui NOMMENT le système de codes
+
+`CountryIso3` et `CountryAlpha2` sont exportés et portés par les trois champs `country` du
+contrat. Ce sont des `string` : rien ne cesse de compiler. Ils existent parce que le contrat
+portait deux systèmes de codes sous un seul type, et que l'autocomplétion ne disait pas lequel.
+
+| Champ | Système |
+|---|---|
+| `sendMessage` → `country` | `CountryIso3` — « CIV », « FRA » |
+| `estimateMessage` → `country` | `CountryIso3` — « CIV », « FRA » |
+| `listSenderIds` → `senderIds[].countries[].country` | `CountryAlpha2` — « CI », « FR » |
+
+### Corrigé — le contrat annonçait le mauvais système sur le devis
+
+`estimateMessage` documentait `country` en alpha-2 quand le moteur de routage le matche en
+alpha-3. Un devis publié avec « FR » ne matchait aucune règle pays : la cascade retombait en
+silence sur la route par défaut et le devis annonçait **un prix qui n'était pas celui du débit**.
+La description dit désormais alpha-3.
+
+### Changé — un `country` inconnu est REFUSÉ, plus ignoré
+
+`sendMessage` et `estimateMessage` répondent `400 COUNTRY_INVALID` quand `country` ne désigne
+aucun pays du catalogue ISO 3166-1 — y compris un code de la bonne longueur mais inexistant. Sur
+l'envoi, le refus arrive **avant tout débit**. Auparavant, une valeur de ce genre était acceptée
+et l'envoi partait, facturé, sur une route que vous n'aviez pas demandée.
+
+Ce n'est pas cassant pour un appel correct : `country` absent, vide, ou en alpha-3 valide (casse
+et espaces indifférents) se comporte exactement comme avant.
+
+### Aussi dans ce tarball — un correctif du 8 août jamais publié
+
+`SenndoErrorCode` a gagné `IDEMPOTENCY_PAYLOAD_MISMATCH` dans le dépôt le 2026-08-08 (une clé
+d'idempotence rejouée avec un corps DIFFÉRENT est refusée en `409` plutôt que de rendre la réponse
+de l'envoi d'origine). Le tarball `1.0.1` ne le porte pas — il est parti avant. `COUNTRY_INVALID`
+s'y ajoute avec cette version. L'union reste **ouverte** : ces ajouts ne cassent personne.
+
 ## 1.0.1 — 2026-08-05
 
 **Si vous avez installé `1.0.0`, mettez à jour.** Le tarball npm de `1.0.0` embarquait un `dist/`
