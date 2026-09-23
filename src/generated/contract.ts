@@ -22,7 +22,8 @@ export const SENNDO_API_BASE_URL = 'https://api.senndo.com'
 /** Version du document OpenAPI dont ce fichier est dérivé. */
 export const SENNDO_CONTRACT_VERSION = '1.0.0'
 
-export type Channel = 'sms' | 'whatsapp_cloud' | 'whatsapp_baileys' | 'email' | 'voice'
+export type Channel =
+  'sms' | 'whatsapp_cloud' | 'whatsapp_baileys' | 'email' | 'voice' | 'whatsapp_twilio'
 
 export type MessageStatus =
   'pending' | 'dispatching' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'unknown'
@@ -65,6 +66,7 @@ export type FailureCode =
   | 'NO_ANSWER'
   | 'BUSY'
   | 'CALL_CANCELED'
+  | 'BILLING_REFUSED'
   | 'PROVIDER_REFUSED'
   | (string & {})
 
@@ -82,6 +84,7 @@ export const KNOWN_FAILURE_CODES = [
   'NO_ANSWER',
   'BUSY',
   'CALL_CANCELED',
+  'BILLING_REFUSED',
   'PROVIDER_REFUSED',
 ] as const
 
@@ -153,6 +156,25 @@ export interface SendMessageBody {
     urlButtonVariable?: string
   }
   /**
+   * Modèle hébergé, REQUIS sur le canal whatsapp_twilio (et refusé ailleurs) : ce canal n’envoie
+   * que des modèles approuvés auprès du partenaire d’acheminement — un texte libre y est refusé
+   * AVANT tout débit (CONTENT_REQUIRED). Collez l’identifiant opaque du modèle (préfixe HX) et
+   * ses variables nommées. Un identifiant que le partenaire ne connaît pas est refusé avant tout
+   * débit (CONTENT_NOT_FOUND).
+   */
+  content?: {
+    /**
+     * Identifiant opaque du modèle approuvé auprès du partenaire d’acheminement (préfixe HX, 34
+     * caractères).
+     */
+    sid?: string
+    /**
+     * Variables du modèle, par nom ("1", "2", … pour les positionnelles), valeurs en chaînes.
+     * Défaut : {}.
+     */
+    variables?: Record<string, unknown>
+  }
+  /**
    * Clé d’idempotence fournie par le client. Les préfixes in: et cmp: sont réservés à la
    * plateforme et refusés en 400.
    */
@@ -162,7 +184,7 @@ export interface SendMessageBody {
    */
   senderId?: string
   /**
-   * Override du pays de routage, en ISO 3166-1 alpha-3 (« CIV », « FRA »). Absent, le pays est
+   * Override du pays de routage, en ISO 3166-1 alpha-3 (« BRA », « JPN »). Absent, le pays est
    * DÉRIVÉ du destinataire. Un code inconnu du catalogue est refusé en 400 (COUNTRY_INVALID)
    * avant tout débit : il ne pourrait matcher aucune règle de routage, et l’envoi partirait —
    * facturé — sur la route par défaut.
@@ -251,6 +273,14 @@ export type SendMessageResponse = {
    */
   reversedAmountUsd: string | null
   /**
+   * Raison de l’échec, quand cet appel s’est conclu par status: "failed". null sur tout autre
+   * statut — un envoi accepté n’a pas de raison d’échec, et un verdict de livraison ultérieur se
+   * lit par webhook ou par GET /v1/messages/{id}. Mêmes valeurs, même sens et mêmes garanties de
+   * compatibilité que le champ du journal : c’est le code stable senndo, indépendant de
+   * l’opérateur, sur lequel brancher votre logique.
+   */
+  failureCode: FailureCode | null
+  /**
    * true quand la clé d’idempotence avait DÉJÀ produit ce message : aucun nouveau débit n’a eu
    * lieu, et le corps décrit l’envoi d’origine.
    */
@@ -302,6 +332,15 @@ export type GetMessageResponse = {
    * normalisable.
    */
   failureCode: FailureCode | null
+  /**
+   * true quand l’envoi a été FACTURÉ et qu’aucun verdict de livraison n’est jamais arrivé du
+   * fournisseur. À ne pas confondre avec status: "sent", qui dit seulement que l’opérateur a
+   * pris le message en charge : un message peut rester "sent" indéfiniment, et le statut seul ne
+   * distingue pas un envoi de deux secondes d’un envoi de quatre semaines resté sans preuve.
+   * false dès qu’un verdict existe — un refus est un verdict — et false sur un envoi non
+   * facturé.
+   */
+  verdictPending: boolean
   /**
    * Devise de facturation.
    */
@@ -427,6 +466,15 @@ export type ListMessagesResponse = {
      * normalisable.
      */
     failureCode: FailureCode | null
+    /**
+     * true quand l’envoi a été FACTURÉ et qu’aucun verdict de livraison n’est jamais arrivé du
+     * fournisseur. À ne pas confondre avec status: "sent", qui dit seulement que l’opérateur a
+     * pris le message en charge : un message peut rester "sent" indéfiniment, et le statut seul ne
+     * distingue pas un envoi de deux secondes d’un envoi de quatre semaines resté sans preuve.
+     * false dès qu’un verdict existe — un refus est un verdict — et false sur un envoi non
+     * facturé.
+     */
+    verdictPending: boolean
     /**
      * Devise de facturation.
      */
@@ -646,6 +694,14 @@ export type ListPricesResponse = {
      * enfants.
      */
     buyerAccountId: string | null
+    /**
+     * Régime de la ligne. false = tarif ordinaire, l’acheminement est payé par la plateforme. true
+     * = transport apporté, le compte facturé paie son transporteur en direct et ne vous achète que
+     * la plateforme. LES DEUX PEUVENT COEXISTER sur le même canal et le même groupe : sans ce
+     * champ, deux lignes de votre grille seraient indiscernables, et renvoyer l’une à PUT
+     * /v1/prices réécrirait l’autre.
+     */
+    byok: boolean
   }>
 }
 
@@ -686,6 +742,22 @@ export type GetBalanceResponse = {
    * proposez pas de paiement dans cette devise.
    */
   billable: boolean
+  /**
+   * Profondeur de découvert autorisée, USD, chaîne décimale POSITIVE. Le solde peut descendre
+   * jusqu’à -overdraftFloorUsd avant qu’un envoi soit refusé. 0.000000 = aucun découvert.
+   */
+  overdraftFloorUsd: string
+  /**
+   * overdraftFloorUsd converti dans currency, arrondi à 6 décimales.
+   */
+  overdraftFloor: string
+  /**
+   * Crédit réellement envoyable, APRÈS réserve en vol et plancher de découvert, jamais négatif.
+   * C’est ce chiffre qui répond à « ai-je encore de quoi envoyer ? », et c’est exactement le
+   * montant qu’un envoi accepte : balanceUsd seul sous-estime le crédit du plancher entier, peut
+   * être négatif, et ignore les blocs de réservation en cours.
+   */
+  spendableUsd: string
 }
 
 /** Réponse 200 de `GET /v1/currencies`. */
@@ -812,7 +884,7 @@ export interface EstimateMessageBody {
    */
   senderId?: string | null
   /**
-   * Destination en ISO 3166-1 alpha-3 (« CIV », « FRA ») — le MÊME système que le `country` de
+   * Destination en ISO 3166-1 alpha-3 (« MEX », « IDN ») — le MÊME système que le `country` de
    * l’envoi, parce que c’est la même cascade de routage qui résout les deux. Le devis résout au
    * niveau PAYS. Un code inconnu du catalogue est refusé en 400 (COUNTRY_INVALID) : il ne
    * pourrait matcher aucune règle, et le devis annoncerait le prix de la route par défaut — pas
@@ -1323,7 +1395,7 @@ export type ListWaCloudNumbersResponse = {
   sharedSenders: Array<{
     /**
      * Nature de l’émetteur partagé. C’est elle qui dit COMMENT il s’identifie : le Cloud par son
-     * nom vérifié, le Baileys par son numéro appairé.
+     * nom vérifié, l’appairé par son numéro.
      */
     kind: 'whatsapp_cloud' | 'whatsapp_baileys'
     /**
@@ -1331,13 +1403,13 @@ export type ListWaCloudNumbersResponse = {
      */
     channel: string
     /**
-     * Nom vérifié affiché au destinataire (WhatsApp Cloud). TOUJOURS null pour un émetteur Baileys
-     * : le nom vérifié est un concept Cloud, et un message Baileys arrive avec le NUMÉRO.
+     * Nom vérifié affiché au destinataire (WhatsApp Cloud). TOUJOURS null pour un émetteur appairé
+     * : le nom vérifié est un concept Cloud, et un message appairé arrive avec le NUMÉRO.
      */
     verifiedName: string | null
     /**
      * Numéro appairé, tel que le destinataire le verra. TOUJOURS null côté Cloud — le numéro
-     * plateforme reste un secret. Côté Baileys, null seulement dans la fenêtre où la session est
+     * plateforme reste un secret. Côté appairé, null seulement dans la fenêtre où la session est
      * connectée mais où le numéro n’a pas encore été remonté.
      */
     pairedNumber: string | null
@@ -1347,11 +1419,48 @@ export type ListWaCloudNumbersResponse = {
      */
     oneWay: boolean
     /**
-     * Poignée de désignation de l’émetteur Baileys partagé, absente de l’entrée Cloud. Ce n’est
+     * Poignée de désignation de l’émetteur appairé partagé, absente de l’entrée Cloud. Ce n’est
      * pas un credential : le partagé est ouvert à tout compte.
      */
     sessionId?: string
   }>
+}
+
+/** Réponse 200 de `GET /v1/channels/whatsapp_twilio/credentials`. */
+export type GetRoutingCredentialsResponse = {
+  /**
+   * null = aucun identifiant apporté : vos envois partent de l’émetteur partagé.
+   */
+  credentials: {
+    /**
+     * Jeu d’identifiants.
+     */
+    id: string
+    /**
+     * Les QUATRE derniers caractères de l’identifiant de compte, et rien de plus : assez pour
+     * reconnaître lequel de vos comptes est branché, trop peu pour en déduire le reste.
+     */
+    accountSidLast4: string
+    /**
+     * Le numéro que verront vos destinataires.
+     */
+    waFromNumber: string
+    /**
+     * La marque affichée au-dessus de votre numéro. null = numéro nu.
+     */
+    label: string | null
+    /**
+     * Quand le couple a été prouvé par un appel réel au partenaire d’acheminement. Un identifiant
+     * bien formé ne prouve rien : cette date atteste d’un appel réseau, pas d’une validation de
+     * forme.
+     */
+    verifiedAt: string
+  } | null
+  /**
+   * L’émetteur partagé de la plateforme peut émettre pour vous si vous n’apportez pas
+   * d’identifiants.
+   */
+  platformFallbackAvailable: boolean
 }
 
 /** Réponse 200 de `GET /v1/webhooks`. */
@@ -1458,9 +1567,11 @@ export interface ListWebhookDeliveriesQuery {
    */
   pageSize?: number
   /**
-   * Filtre d’issue : pending | failed_retrying | succeeded | failed_permanent.
+   * Filtre d’issue : pending | delivering | failed_retrying | succeeded | failed_permanent. Une
+   * valeur hors de cette liste est REFUSÉE (400) — jamais ignorée : un filtre ignoré rendrait un
+   * sur-ensemble en se faisant passer pour la tranche demandée.
    */
-  status?: 'pending' | 'failed_retrying' | 'succeeded' | 'failed_permanent'
+  status?: 'pending' | 'delivering' | 'failed_retrying' | 'succeeded' | 'failed_permanent'
 }
 
 /** Réponse 200 de `GET /v1/webhooks/deliveries`. */
@@ -1487,7 +1598,8 @@ export type ListWebhookDeliveriesResponse = {
      */
     failedPermanent: number
     /**
-     * Pas encore tranchées.
+     * Pas encore tranchées : pending, delivering et failed_retrying réunis. Avec succeeded et
+     * failedPermanent, les trois seaux recomposent exactement total.
      */
     inFlight: number
   }
@@ -1755,6 +1867,18 @@ export const OPERATIONS = {
     successStatus: '200',
     billableSideEffect: false,
   },
+  getRoutingCredentials: {
+    operationId: 'getRoutingCredentials',
+    method: 'GET',
+    path: '/v1/channels/whatsapp_twilio/credentials',
+    pathParams: [],
+    queryParams: [],
+    requiredQueryParams: [],
+    requiredBodyFields: [],
+    contentType: null,
+    successStatus: '200',
+    billableSideEffect: false,
+  },
   listWebhooks: {
     operationId: 'listWebhooks',
     method: 'GET',
@@ -1826,6 +1950,7 @@ export const OPERATION_IDS = [
   'listInboxMessages',
   'listWaTemplates',
   'listWaCloudNumbers',
+  'getRoutingCredentials',
   'listWebhooks',
   'createWebhook',
   'revokeWebhook',

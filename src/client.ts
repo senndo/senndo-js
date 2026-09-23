@@ -42,6 +42,7 @@ import type {
   ListMessagesResponse,
   ListPricesResponse,
   ListSenderIdsResponse,
+  GetRoutingCredentialsResponse,
   ListWaCloudNumbersResponse,
   ListWaTemplatesResponse,
   ListWebhookDeliveriesQuery,
@@ -63,7 +64,7 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_RETRIES = 2
 
 /** La version du paquet, injectée ici et vérifiée contre `package.json` par un test. */
-export const SDK_VERSION = '1.0.2'
+export const SDK_VERSION = '1.1.0'
 
 export class SenndoClient {
   readonly #config: TransportConfig
@@ -140,12 +141,18 @@ export class SenndoClient {
     this.#assertRequiredBody(OPERATIONS.sendMessage, body as unknown as Record<string, unknown>)
 
     // La règle que `required` ne peut pas porter (D-122) : le serveur exempte `text` quand le
-    // contenu vit dans `media` ou `template`, mais un envoi sans AUCUN des trois n'a pas de
-    // contenu et part en 400. L'attraper ici épargne l'aller-retour.
-    if (body.text === undefined && body.media === undefined && body.template === undefined) {
+    // contenu vit dans `media`, `template` ou `content` (modèle Twilio, `whatsapp_twilio`), mais
+    // un envoi sans AUCUN des quatre n'a pas de contenu et part en 400. L'attraper ici épargne
+    // l'aller-retour.
+    if (
+      body.text === undefined &&
+      body.media === undefined &&
+      body.template === undefined &&
+      body.content === undefined
+    ) {
       throw new SenndoRequestError(
-        'senndo: un envoi doit porter du contenu — renseignez « text », ou « media », ou ' +
-          '« template ». Le texte n’est facultatif que lorsque l’un des deux autres le remplace.',
+        'senndo: un envoi doit porter du contenu — renseignez « text », « media », « template » ' +
+          'ou « content ». Le texte n’est facultatif que lorsque l’un des trois autres le remplace.',
       )
     }
     for (const prefix of RESERVED_IDEMPOTENCY_PREFIXES) {
@@ -323,6 +330,18 @@ export class SenndoClient {
   async listWaCloudNumbers(options?: RequestOptions): Promise<ListWaCloudNumbersResponse> {
     return this.#call<ListWaCloudNumbersResponse>(
       { descriptor: OPERATIONS.listWaCloudNumbers },
+      options,
+    )
+  }
+
+  /**
+   * Les identifiants d'acheminement apportés par le compte, et si l'émetteur partagé reste
+   * disponible en repli. Aucun secret n'en sort : le jeton n'est dans aucune réponse, et de
+   * l'identifiant de compte seuls les quatre derniers caractères sont rendus.
+   */
+  async getRoutingCredentials(options?: RequestOptions): Promise<GetRoutingCredentialsResponse> {
+    return this.#call<GetRoutingCredentialsResponse>(
+      { descriptor: OPERATIONS.getRoutingCredentials },
       options,
     )
   }

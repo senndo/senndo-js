@@ -22,6 +22,11 @@ Deno, worker de bord. Sur une plateforme sans `fetch`, passez le vôtre à la co
 ## Démarrer
 
 ```ts
+import { SenndoClient } from '@senndo/sdk'
+
+// La clé se crée dans la console, écran « REST API ». Ne la committez jamais.
+const senndo = new SenndoClient({ apiKey: cleApi })
+
 const message = await senndo.sendMessage({
   channel: 'sms',
   to: '+15550001111',
@@ -104,7 +109,7 @@ try {
 | 403 | `SenndoForbiddenError` | Allowlist d'IP, compte suspendu, contenu bloqué. |
 | 404 | `SenndoNotFoundError` | Introuvable, ou hors de votre compte. |
 | 409 | `SenndoConflictError` | Conflit d'état (média référencé, quota). |
-| 413 / 415 | `SenndoPayloadTooLargeError` / `SenndoUnsupportedMediaTypeError` | Fichier trop gros, type refusé. |
+| 413 / 415 | `SenndoPayloadTooLargeError` / `SenndoUnsupportedMediaTypeError` | Corps trop volumineux (`FILE_TOO_LARGE` sur un fichier, `BODY_TOO_LARGE` sur un corps JSON), type refusé. |
 | 429 | `SenndoRateLimitError` | Cadence dépassée ; `retryAfterSeconds`. |
 | 503 | `SenndoServiceUnavailableError` | Le canal ne peut pas livrer **maintenant**. Rien n'a été débité. |
 
@@ -150,7 +155,7 @@ approuvé. Le corps du modèle **est** le contenu — `text` devient inutile.
 await senndo.sendMessage({
   channel: 'whatsapp_cloud',
   to: '+15550001111',
-  template: { name: 'official_otp_code_template', variables: ['424242'] },
+  template: { name: 'official_otp_code_template', language: 'fr', variables: ['424242'] },
   idempotencyKey: `otp-${utilisateurId}-${tentative}`,
 })
 ```
@@ -171,6 +176,51 @@ await senndo.sendMessage({
   idempotencyKey: `visuel-${fichier.ref}`,
 })
 ```
+
+## Tous les canaux
+
+Le même appel sert les six canaux ; seul le contenu change.
+
+```ts
+// E-mail : `senderId` est une adresse vérifiée de votre compte, `subject` est obligatoire.
+await senndo.sendMessage({
+  channel: 'email',
+  to: 'client@example.com',
+  senderId: 'contact@example.com',
+  subject: 'Votre commande est expédiée',
+  text: 'Bonjour, votre colis est en route.',
+  idempotencyKey: `expedition-${commande.reference}`,
+})
+
+// WhatsApp Twilio : un modèle Twilio approuvé (`HX…`) et ses variables numérotées.
+await senndo.sendMessage({
+  channel: 'whatsapp_twilio',
+  to: '+15550001111',
+  content: { sid: 'HX00000000000000000000000000000000', variables: { '1': '424242' } },
+  idempotencyKey: `otp-twilio-${utilisateurId}-${tentative}`,
+})
+```
+
+Un nom de modèle WhatsApp Cloud qui existe en plusieurs langues exige `template.language`, sans
+quoi l'envoi est refusé en `422 TEMPLATE_LANGUAGE_REQUIRED`. Ce que votre compte peut réellement
+utiliser se lit avant d'envoyer :
+
+```ts
+const { senderIds } = await senndo.listSenderIds()
+const actifs = senderIds.filter((s) => s.lifecycleStatus === 'active').map((s) => s.value)
+
+const { templates } = await senndo.listWaTemplates()
+const otp = templates.find((t) => t.category === 'AUTHENTICATION')
+journaliser(actifs, otp?.name, otp?.language)
+```
+
+## Quand un statut est-il définitif ?
+
+`delivered`, `read` et `failed` sont définitifs. `sent` dit que l'opérateur a pris le message en
+charge ; tant que `verdictPending` vaut `true`, aucune preuve de remise n'est encore arrivée.
+Certaines routes n'émettent jamais d'accusé de remise : `sent` peut alors rester le dernier mot.
+Un `failed` rendu par le fournisseur avant toute remise est contre-passé :
+`reversedAmountUsd` porte le montant rendu.
 
 ## Lectures de compte
 

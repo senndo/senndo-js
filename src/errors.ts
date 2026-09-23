@@ -39,10 +39,13 @@ export type SenndoErrorCode =
   | 'FILE_TOO_LARGE'
   | 'UNSUPPORTED_TYPE'
   | 'NO_ROUTE'
+  | 'DESTINATION_NOT_SERVED'
+  | 'TIER_NOT_SERVED'
   | 'PRICE_NOT_FOUND'
   | 'PRICE_CHAIN_INCOMPLETE'
   | 'SENDER_HAS_NO_PARENT'
   | 'VELOCITY_EXCEEDED'
+  | 'RATE_LIMITED'
   | 'TOO_MANY_UPLOADS'
   | 'WEBHOOK_ENDPOINT_LIMIT'
   | 'PROVIDER_UNAVAILABLE'
@@ -124,7 +127,15 @@ export class SenndoApiError extends SenndoError {
   }
 }
 
-/** 400 / 422 — la requête est mal formée, ou irrecevable en l'état. Corrigez l'appel. */
+/**
+ * 400 / 422 — la requête est mal formée, ou irrecevable en l'état. Corrigez l'appel.
+ *
+ * Le corps peut n'avoir jamais été LU : `EMPTY_BODY` (corps annoncé en JSON mais vide) et
+ * `MALFORMED_JSON` (corps illisible) sont rendus par le serveur avant d'atteindre la route, donc
+ * avant toute validation métier. Les autres codes de ce statut concernent un corps bien formé
+ * mais refusé sur le fond. Dans tous les cas la reprise est inutile tant que l'appel n'a pas
+ * changé — c'est ce qui sépare ce statut d'un 5xx.
+ */
 export class SenndoValidationError extends SenndoApiError {}
 
 /** 401 — clé absente, malformée, inconnue ou révoquée. */
@@ -139,19 +150,48 @@ export class SenndoInsufficientFundsError extends SenndoApiError {}
 /** 403 — la clé était valide, l'appel est refusé (allowlist, suspension, contenu bloqué). */
 export class SenndoForbiddenError extends SenndoApiError {}
 
-/** 404 — la ressource n'existe pas, ou n'appartient pas au compte appelant. */
+/**
+ * 404 — la ressource n'existe pas, ou n'appartient pas au compte appelant.
+ *
+ * `ROUTE_NOT_FOUND` est le cas à part : aucune route ne sert ce couple méthode + chemin. C'est
+ * une URL fautive, pas une ressource absente.
+ */
 export class SenndoNotFoundError extends SenndoApiError {}
 
 /** 409 — conflit d'état : média encore référencé, quota dépassé, mode d'idempotence divergent. */
 export class SenndoConflictError extends SenndoApiError {}
 
-/** 413 — le fichier dépasse la taille acceptée. */
+/**
+ * 413 — le corps de la requête dépasse le plafond accepté.
+ *
+ * Deux causes distinctes : un FICHIER trop volumineux sur un envoi multipart
+ * (`FILE_TOO_LARGE`), ou un CORPS JSON au-delà du plafond de la route (`BODY_TOO_LARGE`,
+ * 1 Mio par défaut). Le code du corps d'erreur les sépare — la taille du fichier et celle
+ * de la requête ne se corrigent pas de la même façon.
+ */
 export class SenndoPayloadTooLargeError extends SenndoApiError {}
 
-/** 415 — type de fichier refusé, ou contenu qui ne correspond pas à l'extension. */
+/**
+ * 415 — le type de contenu n'est pas pris en charge.
+ *
+ * Deux causes distinctes, séparées par le code : le `Content-Type` de la REQUÊTE n'est servi par
+ * aucun parseur — y compris quand il est absent (`UNSUPPORTED_MEDIA_TYPE`) — ou le type du
+ * FICHIER envoyé en multipart est refusé, ou son contenu ne correspond pas à son extension
+ * (`UNSUPPORTED_TYPE`). Ce ne sont pas les mêmes corrections : la première tient à l'en-tête, la
+ * seconde au fichier.
+ */
 export class SenndoUnsupportedMediaTypeError extends SenndoApiError {}
 
-/** 429 — cadence dépassée. `retryAfterSeconds` porte l'attente demandée quand elle est connue. */
+/**
+ * 429 — cadence dépassée. `retryAfterSeconds` porte l'attente demandée quand elle est connue.
+ *
+ * DEUX CODES, DEUX REMÈDES, et c'est sur `error.code` qu'on les sépare — jamais sur le statut :
+ *
+ *  * `VELOCITY_EXCEEDED` — trop d'ENVOIS pour ce compte sur 60 secondes. Étalez la campagne ;
+ *    le message refusé n'a jamais été débité.
+ *  * `RATE_LIMITED` — trop d'APPELS (ou trop d'octets) pour cette clé sur 60 secondes, lectures
+ *    comprises. Espacez les requêtes, ou parallélisez moins.
+ */
 export class SenndoRateLimitError extends SenndoApiError {
   retryAfterSeconds: number | null = null
 }

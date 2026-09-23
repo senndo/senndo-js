@@ -74,6 +74,7 @@ export type {
   ListMessagesResponse,
   ListPricesResponse,
   ListSenderIdsResponse,
+  GetRoutingCredentialsResponse,
   ListWaCloudNumbersResponse,
   ListWaTemplatesResponse,
   ListWebhookDeliveriesQuery,
