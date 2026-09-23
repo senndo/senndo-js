@@ -192,7 +192,7 @@ await senndo.sendMessage({
   idempotencyKey: `expedition-${commande.reference}`,
 })
 
-// WhatsApp Twilio : un modèle Twilio approuvé (`HX…`) et ses variables numérotées.
+// WhatsApp Twilio : un modèle hébergé (`HX…`, lu par `listContentTemplates()`) et ses variables.
 await senndo.sendMessage({
   channel: 'whatsapp_twilio',
   to: '+15550001111',
@@ -212,6 +212,12 @@ const actifs = senderIds.filter((s) => s.lifecycleStatus === 'active').map((s) =
 const { templates } = await senndo.listWaTemplates()
 const otp = templates.find((t) => t.category === 'AUTHENTICATION')
 journaliser(actifs, otp?.name, otp?.language)
+
+// whatsapp_twilio : les modèles hébergés prêtés par la plateforme. Liste vide et
+// `reason: 'byok'` si votre compte émet sous ses propres identifiants d'acheminement.
+const heberges = await senndo.listContentTemplates()
+const francais = heberges.templates.find((t) => t.language === 'fr')
+journaliser(heberges.reason, francais?.sid, francais?.body)
 ```
 
 ## Quand un statut est-il définitif ?
@@ -278,6 +284,18 @@ const endpoint = await senndo.createWebhook({
 })
 
 conserverLeSecret(endpoint.secret)
+```
+
+Ce secret signe chaque livraison (`X-Senndo-Signature`). Vérifiez-la sur le corps **brut**, avant
+tout `JSON.parse` : un corps re-sérialisé ne vérifie pas. Au-delà de 300 secondes d'écart, la
+signature est refusée comme un rejeu.
+
+```ts
+import { verifyWebhookSignature } from '@senndo/sdk'
+
+if (!(await verifyWebhookSignature(secretWebhook, enTete, corpsBrut))) refuser(400)
+const evenement = JSON.parse(corpsBrut) as { type: string; data: unknown }
+journaliser(evenement.type)
 ```
 
 ## Configuration

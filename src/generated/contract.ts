@@ -847,6 +847,14 @@ export type ListSenderIdsResponse = {
        * Horodatage ISO 8601 du passage à verified, sinon null.
        */
       confirmedAt: string | null
+      /**
+       * AVERTISSEMENT, jamais un refus : le domaine de l’adresse publie une politique DMARC reject
+       * (ou quarantine) et aucune signature n’est alignée sur lui. Vos envois partent et sont
+       * facturés, puis le destinataire les rejette (ou les classe en indésirables). Le remède est
+       * dans la zone DNS du domaine : signature DKIM pour ce domaine, ou politique none. null =
+       * aucun risque connu.
+       */
+      dmarcRisk: 'reject' | 'quarantine' | null
     } | null
     /**
      * Approbation par pays. Une destination absente de cette liste n’est pas approuvée.
@@ -1463,6 +1471,29 @@ export type GetRoutingCredentialsResponse = {
   platformFallbackAvailable: boolean
 }
 
+/** Réponse 200 de `GET /v1/channels/whatsapp_twilio/templates`. */
+export type ListContentTemplatesResponse = {
+  templates: Array<{
+    /**
+     * À passer tel quel dans content.sid.
+     */
+    sid: string
+    /**
+     * Langue du modèle (code ISO 639-1).
+     */
+    language: string
+    /**
+     * Le texte du modèle, marqueurs {{1}}, {{2}}… compris : ce sont les clés de content.variables.
+     */
+    body: string | null
+  }>
+  /**
+   * Pourquoi la liste est vide : byok = vos identifiants apportés, none = aucun modèle proposé.
+   * null quand la liste ne l’est pas.
+   */
+  reason: 'byok' | 'none' | null
+}
+
 /** Réponse 200 de `GET /v1/webhooks`. */
 export type ListWebhooksResponse = {
   endpoints: Array<{
@@ -1879,6 +1910,18 @@ export const OPERATIONS = {
     successStatus: '200',
     billableSideEffect: false,
   },
+  listContentTemplates: {
+    operationId: 'listContentTemplates',
+    method: 'GET',
+    path: '/v1/channels/whatsapp_twilio/templates',
+    pathParams: [],
+    queryParams: [],
+    requiredQueryParams: [],
+    requiredBodyFields: [],
+    contentType: null,
+    successStatus: '200',
+    billableSideEffect: false,
+  },
   listWebhooks: {
     operationId: 'listWebhooks',
     method: 'GET',
@@ -1951,6 +1994,7 @@ export const OPERATION_IDS = [
   'listWaTemplates',
   'listWaCloudNumbers',
   'getRoutingCredentials',
+  'listContentTemplates',
   'listWebhooks',
   'createWebhook',
   'revokeWebhook',

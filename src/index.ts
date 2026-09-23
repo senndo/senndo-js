@@ -17,6 +17,9 @@
 export { SenndoClient, SDK_VERSION } from './client.js'
 /** Utile pour journaliser une clé sans la publier. Le client masque déjà la sienne. */
 export { maskApiKey } from './http.js'
+/** Authentifie un webhook reçu (`X-Senndo-Signature`), anti-rejeu compris. */
+export { verifyWebhookSignature } from './webhooks.js'
+export type { VerifyWebhookOptions } from './webhooks.js'
 
 export {
   SenndoError,
@@ -75,6 +78,7 @@ export type {
   ListPricesResponse,
   ListSenderIdsResponse,
   GetRoutingCredentialsResponse,
+  ListContentTemplatesResponse,
   ListWaCloudNumbersResponse,
   ListWaTemplatesResponse,
   ListWebhookDeliveriesQuery,

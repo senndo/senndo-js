@@ -3,6 +3,19 @@
 Ce paquet suit le [versionnage sémantique](https://semver.org/lang/fr/). Depuis `1.0.0`, la
 surface publique est STABLE : elle ne casse qu'à une majeure.
 
+## 1.2.0 — 2026-09-23
+
+- `verifyWebhookSignature(secret, en-tête, corps)` : authentifie un webhook reçu (`X-Senndo-Signature`), comparaison à durée constante et
+  refus d'un rejeu au-delà de 300 secondes (réglable). Le corps doit être le corps BRUT reçu.
+- `listContentTemplates()` : les modèles hébergés que la plateforme prête au canal `whatsapp_twilio`, à citer dans
+  `content.sid` (`GET /v1/channels/whatsapp_twilio/templates`). Ce canal n'envoie que des
+  modèles : sans cette lecture, un identifiant ne s'obtenait que depuis la console. Liste vide et
+  `reason` égal à `byok` quand le compte émet sous ses propres identifiants d'acheminement.
+- `listSenderIds()` : `verification.dmarcRisk` (`reject`, `quarantine` ou `null`) sur un expéditeur e-mail.
+  Un AVERTISSEMENT, jamais un refus : le domaine publie une politique DMARC stricte et aucune
+  signature n'est alignée sur lui, donc les envois partent, sont facturés, puis sont écartés par
+  le destinataire. Mesuré au rafraîchissement de la vérification.
+
 ## 1.1.0 — 2026-09-23
 
 **Le canal `whatsapp_twilio` s'envoie enfin depuis le SDK.** Le serveur le livrait ; le SDK le

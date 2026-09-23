@@ -43,6 +43,7 @@ import type {
   ListPricesResponse,
   ListSenderIdsResponse,
   GetRoutingCredentialsResponse,
+  ListContentTemplatesResponse,
   ListWaCloudNumbersResponse,
   ListWaTemplatesResponse,
   ListWebhookDeliveriesQuery,
@@ -64,7 +65,7 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_RETRIES = 2
 
 /** La version du paquet, injectée ici et vérifiée contre `package.json` par un test. */
-export const SDK_VERSION = '1.1.0'
+export const SDK_VERSION = '1.2.0'
 
 export class SenndoClient {
   readonly #config: TransportConfig
@@ -342,6 +343,18 @@ export class SenndoClient {
   async getRoutingCredentials(options?: RequestOptions): Promise<GetRoutingCredentialsResponse> {
     return this.#call<GetRoutingCredentialsResponse>(
       { descriptor: OPERATIONS.getRoutingCredentials },
+      options,
+    )
+  }
+
+  /**
+   * Les modèles hébergés que la plateforme prête au canal `whatsapp_twilio`, à citer dans
+   * `content.sid`. Liste vide et `reason: 'byok'` quand le compte émet sous ses propres
+   * identifiants d'acheminement : ses modèles vivent alors dans son propre compte.
+   */
+  async listContentTemplates(options?: RequestOptions): Promise<ListContentTemplatesResponse> {
+    return this.#call<ListContentTemplatesResponse>(
+      { descriptor: OPERATIONS.listContentTemplates },
       options,
     )
   }
