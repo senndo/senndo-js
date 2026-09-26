@@ -3,6 +3,17 @@
 Ce paquet suit le [versionnage sémantique](https://semver.org/lang/fr/). Depuis `1.0.0`, la
 surface publique est STABLE : elle ne casse qu'à une majeure.
 
+## 1.3.0 — 2026-09-26
+
+- `createVerification({ to, locale?, codeLength?, maxAttempts?, idempotencyKey? })`,
+  `checkVerification({ id, code })`, `getVerification(id)` : l’API Verify (`POST /v1/verify`,
+  `POST /v1/verify/check`, `GET /v1/verify/{id}`). senndo génère, envoie par WhatsApp, expire et
+  compte les essais ; le code n’est jamais rendu. Facturée à l’envoi, une fois par vérification ;
+  le verdict de remise arrive avec le fournisseur (`delivery.status`), un destinataire sans
+  WhatsApp échoue avec `recipient_not_on_whatsapp`. Types `CreateVerificationBody`,
+  `CreateVerificationResponse`, `CheckVerificationBody`, `CheckVerificationResponse`,
+  `GetVerificationResponse`.
+
 ## 1.2.0 — 2026-09-23
 
 - `verifyWebhookSignature(secret, en-tête, corps)` : authentifie un webhook reçu (`X-Senndo-Signature`), comparaison à durée constante et
@@ -78,8 +89,8 @@ portait deux systèmes de codes sous un seul type, et que l'autocomplétion ne d
 
 | Champ | Système |
 |---|---|
-| `sendMessage` → `country` | `CountryIso3` — « CIV », « FRA » |
-| `estimateMessage` → `country` | `CountryIso3` — « CIV », « FRA » |
+| `sendMessage` → `country` | `CountryIso3` — « USA », « FRA » |
+| `estimateMessage` → `country` | `CountryIso3` — « USA », « FRA » |
 | `listSenderIds` → `senderIds[].countries[].country` | `CountryAlpha2` — « CI », « FR » |
 
 ### Corrigé — le contrat annonçait le mauvais système sur le devis

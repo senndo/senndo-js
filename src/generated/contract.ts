@@ -29,7 +29,7 @@ export type MessageStatus =
   'pending' | 'dispatching' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'unknown'
 
 /**
- * Code pays ISO 3166-1 alpha-3, en majuscules (« CIV », « FRA », « SEN ») — le format du
+ * Code pays ISO 3166-1 alpha-3, en majuscules (« USA », « FRA », « JPN ») — le format du
  * moteur de routage. Un code que le catalogue ne connaît pas est REFUSÉ, jamais ignoré : il ne
  * pourrait matcher aucune règle, et l’appel retomberait en silence sur la route par défaut, à
  * un prix que vous n’avez pas demandé.
@@ -357,6 +357,121 @@ export type GetMessageResponse = {
    * Origine de l’envoi : console, appel par clé API, ou test du parcours de démarrage.
    */
   source: 'console' | 'api' | 'api_test'
+}
+
+/** Corps de `POST /v1/verify`. */
+export interface CreateVerificationBody {
+  /**
+   * Destinataire au format E.164.
+   */
+  to: string
+  /**
+   * Canal de vérification. Seul « whatsapp » est ouvert ; d’autres suivront sans rupture de
+   * contrat.
+   */
+  channel?: 'whatsapp'
+  /**
+   * Langue du message reçu. Défaut : fr.
+   */
+  locale?: 'fr' | 'en'
+  /**
+   * Longueur du code, 4 à 8 chiffres. Défaut : 6.
+   */
+  codeLength?: number
+  /**
+   * Essais autorisés sur POST /v1/verify/check, 1 à 10. Défaut : 5.
+   */
+  maxAttempts?: number
+  /**
+   * Clé d’idempotence choisie par vous : un rejeu avec la même clé renvoie la même vérification
+   * (« replay: true ») sans nouvel envoi ni nouveau débit.
+   */
+  idempotencyKey?: string
+}
+
+/** Réponse 201 de `POST /v1/verify`. */
+export type CreateVerificationResponse = {
+  id: string
+  /**
+   * « pending » tant qu’aucun code juste n’a été contrôlé ; « approved » est terminal.
+   */
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'max_attempts'
+  channel: 'whatsapp'
+  to: string
+  /**
+   * Expiration du code, alignée sur ce que le message annonce au destinataire.
+   */
+  expiresAt: string
+  attemptsRemaining: number
+  delivery: {
+    /**
+     * Verdict du fournisseur : « pending » jusqu’à son arrivée, jamais déduit de l’acceptation de
+     * l’envoi.
+     */
+    status: 'pending' | 'delivered' | 'failed'
+    /**
+     * Le fournisseur qui a réellement porté le dernier envoi.
+     */
+    channelUsed: 'whatsapp_cloud' | 'whatsapp_twilio' | null
+    /**
+     * Raison d’un échec, dont « recipient_not_on_whatsapp ».
+     */
+    reason: string | null
+  }
+  /**
+   * « true » quand la clé d’idempotence a renvoyé une vérification existante : aucun nouvel
+   * envoi, aucun nouveau débit.
+   */
+  replay: boolean
+}
+
+/** Corps de `POST /v1/verify/check`. */
+export interface CheckVerificationBody {
+  /**
+   * Identifiant rendu par POST /v1/verify.
+   */
+  id: string
+  /**
+   * Code saisi par l’utilisateur, 4 à 8 chiffres.
+   */
+  code: string
+}
+
+/** Réponse 200 de `POST /v1/verify/check`. */
+export type CheckVerificationResponse = {
+  id: string
+  status: 'approved' | 'denied' | 'expired' | 'max_attempts'
+}
+
+/** Réponse 200 de `GET /v1/verify/{id}`. */
+export type GetVerificationResponse = {
+  id: string
+  /**
+   * « pending » tant qu’aucun code juste n’a été contrôlé ; « approved » est terminal.
+   */
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'max_attempts'
+  channel: 'whatsapp'
+  to: string
+  /**
+   * Expiration du code, alignée sur ce que le message annonce au destinataire.
+   */
+  expiresAt: string
+  attemptsRemaining: number
+  delivery: {
+    /**
+     * Verdict du fournisseur : « pending » jusqu’à son arrivée, jamais déduit de l’acceptation de
+     * l’envoi.
+     */
+    status: 'pending' | 'delivered' | 'failed'
+    /**
+     * Le fournisseur qui a réellement porté le dernier envoi.
+     */
+    channelUsed: 'whatsapp_cloud' | 'whatsapp_twilio' | null
+    /**
+     * Raison d’un échec, dont « recipient_not_on_whatsapp ».
+     */
+    reason: string | null
+  }
 }
 
 /** Paramètres de requête de `GET /v1/messages`. */
@@ -1730,6 +1845,42 @@ export const OPERATIONS = {
     successStatus: '200',
     billableSideEffect: false,
   },
+  createVerification: {
+    operationId: 'createVerification',
+    method: 'POST',
+    path: '/v1/verify',
+    pathParams: [],
+    queryParams: [],
+    requiredQueryParams: [],
+    requiredBodyFields: ['to'],
+    contentType: 'application/json',
+    successStatus: '201',
+    billableSideEffect: true,
+  },
+  checkVerification: {
+    operationId: 'checkVerification',
+    method: 'POST',
+    path: '/v1/verify/check',
+    pathParams: [],
+    queryParams: [],
+    requiredQueryParams: [],
+    requiredBodyFields: ['id', 'code'],
+    contentType: 'application/json',
+    successStatus: '200',
+    billableSideEffect: false,
+  },
+  getVerification: {
+    operationId: 'getVerification',
+    method: 'GET',
+    path: '/v1/verify/{id}',
+    pathParams: ['id'],
+    queryParams: [],
+    requiredQueryParams: [],
+    requiredBodyFields: [],
+    contentType: null,
+    successStatus: '200',
+    billableSideEffect: false,
+  },
   listMessages: {
     operationId: 'listMessages',
     method: 'GET',
@@ -1979,6 +2130,9 @@ export type OperationId = keyof typeof OPERATIONS
 export const OPERATION_IDS = [
   'sendMessage',
   'getMessage',
+  'createVerification',
+  'checkVerification',
+  'getVerification',
   'listMessages',
   'uploadMedia',
   'listMedia',

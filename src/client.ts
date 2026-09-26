@@ -46,6 +46,11 @@ import type {
   ListContentTemplatesResponse,
   ListWaCloudNumbersResponse,
   ListWaTemplatesResponse,
+  CreateVerificationBody,
+  CreateVerificationResponse,
+  CheckVerificationBody,
+  CheckVerificationResponse,
+  GetVerificationResponse,
   ListWebhookDeliveriesQuery,
   ListWebhookDeliveriesResponse,
   ListWebhooksResponse,
@@ -65,7 +70,7 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_RETRIES = 2
 
 /** La version du paquet, injectée ici et vérifiée contre `package.json` par un test. */
-export const SDK_VERSION = '1.2.0'
+export const SDK_VERSION = '1.3.0'
 
 export class SenndoClient {
   readonly #config: TransportConfig
@@ -197,6 +202,55 @@ export class SenndoClient {
   ): Promise<ListMessagesResponse> {
     return this.#call<ListMessagesResponse>(
       { descriptor: OPERATIONS.listMessages, query: query as Record<string, unknown> | undefined },
+      options,
+    )
+  }
+
+  // ── Vérification (D-278) ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Envoie un code de vérification par WhatsApp et renvoie l'identifiant de la vérification.
+   * Facturé à l'envoi ; le code n'est jamais renvoyé — `checkVerification` le contrôle.
+   */
+  async createVerification(
+    body: CreateVerificationBody,
+    options?: RequestOptions,
+  ): Promise<CreateVerificationResponse> {
+    this.#assertRequiredBody(
+      OPERATIONS.createVerification,
+      body as unknown as Record<string, unknown>,
+    )
+    return this.#call<CreateVerificationResponse>(
+      {
+        descriptor: OPERATIONS.createVerification,
+        body: body as unknown as Record<string, unknown>,
+      },
+      options,
+    )
+  }
+
+  /** Contrôle le code saisi par l'utilisateur : approved, denied, expired ou max_attempts. */
+  async checkVerification(
+    body: CheckVerificationBody,
+    options?: RequestOptions,
+  ): Promise<CheckVerificationResponse> {
+    this.#assertRequiredBody(
+      OPERATIONS.checkVerification,
+      body as unknown as Record<string, unknown>,
+    )
+    return this.#call<CheckVerificationResponse>(
+      {
+        descriptor: OPERATIONS.checkVerification,
+        body: body as unknown as Record<string, unknown>,
+      },
+      options,
+    )
+  }
+
+  /** Lit l'état d'une vérification, dont le verdict de remise du fournisseur. */
+  async getVerification(id: string, options?: RequestOptions): Promise<GetVerificationResponse> {
+    return this.#call<GetVerificationResponse>(
+      { descriptor: OPERATIONS.getVerification, pathValues: { id } },
       options,
     )
   }

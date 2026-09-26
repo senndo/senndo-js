@@ -272,6 +272,27 @@ if (message.status === 'failed') {
 }
 ```
 
+## Vérification d'un numéro (WhatsApp)
+
+senndo génère le code, l'envoie par WhatsApp, l'expire et compte les essais ; votre application ne
+voit jamais le code. Facturée à l'envoi, une fois par vérification.
+
+```ts
+const verification = await senndo.createVerification({
+  to: '+14155550100',
+  locale: 'en',
+  idempotencyKey: 'signup-4242-otp-1',
+})
+
+const verdict = await senndo.checkVerification({ id: verification.id, code: codeSaisi })
+if (verdict.status === 'approved') {
+  ouvrirLaSession()
+}
+```
+
+`getVerification(id)` rend le verdict de remise du fournisseur (`delivery.status`) : un destinataire
+sans WhatsApp échoue avec la raison `recipient_not_on_whatsapp`, à vous de basculer.
+
 ## Webhooks
 
 Le secret n'est lisible **qu'à la création**.
