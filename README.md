@@ -293,6 +293,21 @@ if (verdict.status === 'approved') {
 `getVerification(id)` rend le verdict de remise du fournisseur (`delivery.status`) : un destinataire
 sans WhatsApp échoue avec la raison `recipient_not_on_whatsapp`, à vous de basculer.
 
+L'émetteur se choisit avec `sender`. Absent : votre propre numéro WhatsApp Cloud et votre modèle
+d'authentification si vous en avez désigné un pour cette langue (console, Verify → Émetteur et
+modèle), sinon le numéro partagé de senndo. `"platform"` force le numéro partagé ; `"account"` exige
+la désignation et ne se replie jamais. La réponse dit dans `sender` l'émetteur qui a porté le code ;
+chacun a son prix dans votre carnet.
+
+```ts
+const depuisMonNumero = await senndo.createVerification({
+  to: '+14155550100',
+  sender: 'account',
+  idempotencyKey: 'signup-4242-otp-2',
+})
+console.log(depuisMonNumero.sender) // 'account'
+```
+
 ## Webhooks
 
 Le secret n'est lisible **qu'à la création**.

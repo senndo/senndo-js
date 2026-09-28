@@ -387,6 +387,13 @@ export interface CreateVerificationBody {
    * (« replay: true ») sans nouvel envoi ni nouveau débit.
    */
   idempotencyKey?: string
+  /**
+   * Émetteur du code. Absent : votre numéro WhatsApp Cloud et votre modèle si vous en avez
+   * désigné un pour cette langue (Verify → Émetteur et modèle), sinon le numéro partagé de
+   * senndo. Chacun a son prix dans votre carnet. « account » exige une désignation ; « platform
+   * » force le numéro partagé.
+   */
+  sender?: 'platform' | 'account'
 }
 
 /** Réponse 201 de `POST /v1/verify`. */
@@ -403,6 +410,12 @@ export type CreateVerificationResponse = {
    */
   expiresAt: string
   attemptsRemaining: number
+  /**
+   * L’émetteur qui a porté le code : « platform », le numéro partagé de senndo (repli
+   * automatique) ; « account », votre propre numéro WhatsApp Cloud et votre modèle
+   * d’authentification (sans repli).
+   */
+  sender: 'platform' | 'account'
   delivery: {
     /**
      * Verdict du fournisseur : « pending » jusqu’à son arrivée, jamais déduit de l’acceptation de
@@ -457,6 +470,12 @@ export type GetVerificationResponse = {
    */
   expiresAt: string
   attemptsRemaining: number
+  /**
+   * L’émetteur qui a porté le code : « platform », le numéro partagé de senndo (repli
+   * automatique) ; « account », votre propre numéro WhatsApp Cloud et votre modèle
+   * d’authentification (sans repli).
+   */
+  sender: 'platform' | 'account'
   delivery: {
     /**
      * Verdict du fournisseur : « pending » jusqu’à son arrivée, jamais déduit de l’acceptation de
@@ -1043,6 +1062,15 @@ export interface EstimateMessageBody {
    * personalized.recipients au nombre soumis pour savoir combien seront écartés.
    */
   destinations?: Array<string>
+  /**
+   * Identifiant du modèle WhatsApp de l’envoi (canal "whatsapp_cloud" uniquement) — DOIT valoir
+   * celui de l’envoi réel. Le modèle décide de l’émetteur, donc du prix : un modèle de votre
+   * compte WhatsApp Business part de votre numéro et coûte la redevance de votre carnet, un
+   * modèle partagé de senndo part du numéro partagé au prix ordinaire. Absent : devis d’un envoi
+   * libre, depuis votre numéro si vous en avez un. Un modèle que votre compte ne peut pas
+   * envoyer est refusé en 404 (TEMPLATE_NOT_FOUND).
+   */
+  templateId?: string
 }
 
 /** Réponse 200 de `POST /v1/messages/estimate`. */
@@ -1507,6 +1535,34 @@ export type ListWaCloudNumbersResponse = {
      * Enregistrement.
      */
     createdAt: string
+    /**
+     * Compte WhatsApp Business du numéro, contrôlé auprès de Meta à l’enregistrement. null :
+     * numéro enregistré avant ce contrôle, qui n’envoie ni vos modèles ni ne rapporte de statut de
+     * remise tant qu’il n’est pas enregistré de nouveau.
+     */
+    wabaId: string | null
+    /**
+     * Nom affiché tel que Meta le rapporte ; chaîne vide si jamais lu.
+     */
+    verifiedName: string
+    /**
+     * Statut Meta du nom affiché, valeur brute : APPROVED, PENDING_REVIEW, DECLINED, NONE, ou
+     * toute valeur que Meta ajoutera. La revue d’un nom peut prendre des jours ou des semaines.
+     */
+    nameStatus: string
+    /**
+     * Note de qualité Meta (GREEN, YELLOW, RED…) ; chaîne vide si non lue.
+     */
+    qualityRating: string
+    /**
+     * Dernière lecture de l’état du numéro chez Meta (quotidienne).
+     */
+    lastCheckedAt: string | null
+    /**
+     * Chemin de l’URL de rappel propre à ce numéro, à préfixer par la base de l’API ; null pour un
+     * numéro enregistré avant le contrôle Meta.
+     */
+    webhookPath: string | null
   }>
   /**
    * La plateforme peut émettre pour vous si vous n’avez pas de numéro à vous.

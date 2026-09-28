@@ -3,6 +3,23 @@
 Ce paquet suit le [versionnage sémantique](https://semver.org/lang/fr/). Depuis `1.0.0`, la
 surface publique est STABLE : elle ne casse qu'à une majeure.
 
+## 1.4.0 — 2026-09-28
+
+Ajouts uniquement : aucun champ retiré, aucun type rétréci.
+
+- `createVerification` : champ facultatif `sender` (`"platform"` ou `"account"`). Absent, le code part de votre
+  propre numéro WhatsApp Cloud et de votre modèle d’authentification si vous en avez désigné un
+  pour la langue, sinon du numéro partagé de senndo ; `"account"` exige la désignation et ne se
+  replie jamais. La réponse de `createVerification` et celle de `getVerification` portent `sender` : l’émetteur qui a
+  réellement porté le code, chacun à son prix dans votre carnet.
+- `estimateMessage` : champ facultatif `templateId` (canal `whatsapp_cloud`). Le modèle décide de
+  l’émetteur, donc du prix : un modèle de votre compte WhatsApp Business part de votre numéro, un
+  modèle partagé de senndo part du numéro partagé. Sans lui, un compte qui a son numéro était
+  devisé à la redevance pour un modèle partagé débité au prix ordinaire. Un modèle que le compte
+  ne peut pas envoyer est refusé en 404 (`TEMPLATE_NOT_FOUND`).
+- `listWaCloudNumbers()` : chaque numéro porte `wabaId`, `verifiedName`, `nameStatus`, `qualityRating`,
+  `lastCheckedAt` et `webhookPath` (l’URL de rappel propre au numéro).
+
 ## 1.3.0 — 2026-09-26
 
 - `createVerification({ to, locale?, codeLength?, maxAttempts?, idempotencyKey? })`,
