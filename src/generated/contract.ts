@@ -184,6 +184,17 @@ export interface SendMessageBody {
    */
   senderId?: string
   /**
+   * Canal "whatsapp_cloud" uniquement : le numéro d’où partir — un de vos numéros
+   * (`numbers[].id` de GET /v1/wa-cloud/numbers) ou un numéro plateforme qui vous est délégué
+   * (`sharedSenders[].numberId`). Il décide de l’émetteur et du prix : votre numéro coûte la
+   * redevance de votre carnet, un numéro plateforme le prix ordinaire. Avec un modèle, il doit
+   * être un numéro de la WABA du modèle. Absent : votre numéro le plus récent, sinon le numéro
+   * par défaut de la plateforme ; un modèle part d’un numéro de sa WABA. Une désignation
+   * impossible est refusée en 422 AVANT tout débit (SENDER_NUMBER_NOT_FOUND,
+   * SENDER_NUMBER_TEMPLATE_MISMATCH), jamais remplacée par un autre numéro.
+   */
+  senderNumberId?: string
+  /**
    * Override du pays de routage, en ISO 3166-1 alpha-3 (« BRA », « JPN »). Absent, le pays est
    * DÉRIVÉ du destinataire. Un code inconnu du catalogue est refusé en 400 (COUNTRY_INVALID)
    * avant tout débit : il ne pourrait matcher aucune règle de routage, et l’envoi partirait —
@@ -1056,9 +1067,12 @@ export interface EstimateMessageBody {
    */
   personalize?: boolean
   /**
-   * Les destinataires concrets (numéros E.164, ou adresses sur le canal "email"), 1 000 au plus.
-   * Requis quand personalize vaut true. Un destinataire à qui il manque une valeur est EXCLU du
-   * devis — c’est celui que l’envoi refusera, donc celui qui ne sera pas facturé : comparez
+   * Les destinataires concrets (numéros E.164, ou adresses sur le canal "email"), 10 000 au plus
+   * — 1 000 avec personalize. Recommandé sur tout devis qui précède un envoi : chaque
+   * destinataire est devisé sur sa géographie (pays, réseau, règle propre à votre compte), donc
+   * au prix que son envoi débitera ; présent, il fait le nombre de destinataires. Requis quand
+   * personalize vaut true. Un destinataire à qui il manque une valeur est EXCLU du devis — c’est
+   * celui que l’envoi refusera, donc celui qui ne sera pas facturé : comparez
    * personalized.recipients au nombre soumis pour savoir combien seront écartés.
    */
   destinations?: Array<string>
@@ -1071,6 +1085,12 @@ export interface EstimateMessageBody {
    * envoyer est refusé en 404 (TEMPLATE_NOT_FOUND).
    */
   templateId?: string
+  /**
+   * Numéro WhatsApp Cloud désigné (canal "whatsapp_cloud" uniquement) — DOIT valoir celui de
+   * l’envoi réel (voir POST /v1/messages). Le devis cite le prix de CET émetteur. Une
+   * désignation impossible est refusée en 422, comme l’envoi.
+   */
+  senderNumberId?: string
 }
 
 /** Réponse 200 de `POST /v1/messages/estimate`. */
@@ -1114,14 +1134,30 @@ export type EstimateMessageResponse = {
   transliterated: boolean
   /**
    * Prix unitaire du compte, chaîne décimale USD — SUB-CENTIME : l’arrondir à deux décimales le
-   * rend nul.
+   * rend nul. Avec des destinataires de prix différents, c’est le PLUS CHER ; unitPriceRange
+   * donne alors la fourchette.
    */
   unitPriceUsd: string
   /**
-   * Total exact. Sans personalize : units × recipients × unitPriceUsd. Avec personalize : la
-   * SOMME des unités de chaque corps substitué × unitPriceUsd — jamais une moyenne.
+   * Total exact : la SOMME, destinataire par destinataire, de ses unités × SON prix — jamais une
+   * moyenne. Sans destinations ni personalize : units × recipients × unitPriceUsd.
    */
   totalUsd: string
+  /**
+   * Présent UNIQUEMENT quand les destinataires n’ont pas tous le même prix (plusieurs pays, ou
+   * une règle propre à l’un d’eux) : unitPriceUsd × units × recipients ne retombe alors plus sur
+   * totalUsd. Absent : un seul prix pour tous.
+   */
+  unitPriceRange?: {
+    /**
+     * Prix unitaire le plus bas, USD.
+     */
+    minUsd: string
+    /**
+     * Prix unitaire le plus haut, USD — égal à unitPriceUsd.
+     */
+    maxUsd: string
+  }
   /**
    * Présent UNIQUEMENT quand personalize vaut true. Les scalaires de tête (encoding, chars,
    * segments, units) décrivent alors le PIRE destinataire, jamais la moyenne : ils bornent par
@@ -1404,13 +1440,36 @@ export type ListWaTemplatesResponse = {
      */
     effectiveCategory: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | null
     /**
-     * Seul approved est envoyable.
+     * Seul approved est envoyable. deleted : supprimé ou archivé chez Meta, conservé pour
+     * l’historique.
      */
-    status: 'draft' | 'pending' | 'approved' | 'rejected' | 'paused'
+    status: 'draft' | 'pending' | 'approved' | 'rejected' | 'paused' | 'deleted'
     /**
      * Modèle partagé de la plateforme : envoyable, non éditable.
      */
     platformShared: boolean
+    /**
+     * D’où part le modèle, donc à quel prix. platform_shared et platform partent du numéro partagé
+     * au tarif plateforme ; own part d’un numéro de votre compte sur sa WABA, où senndo ne facture
+     * que sa redevance. Un modèle appartient à une WABA, pas à un numéro : ne déduisez jamais
+     * l’origine de son nom.
+     */
+    origin: {
+      kind: 'platform_shared' | 'platform' | 'own'
+      /**
+       * WABA du modèle pour own ; null pour les origines plateforme.
+       */
+      wabaId: string | null
+      /**
+       * Vos numéros qui l’enverraient, le premier étant celui qui part (own seulement). Vide sous
+       * own : aucun numéro ne peut plus l’envoyer, l’envoi est refusé avant débit.
+       */
+      senders: Array<{
+        id: string
+        displayNumber: string
+        verifiedName: string
+      }>
+    }
     /**
      * Corps approuvé, variables positionnelles comprises.
      */
@@ -1597,6 +1656,12 @@ export type ListWaCloudNumbersResponse = {
      * notifications). Les réponses des destinataires ne vous reviennent pas.
      */
     oneWay: boolean
+    /**
+     * Poignée de désignation d’un numéro WhatsApp Cloud plateforme qui vous est DÉLÉGUÉ — à passer
+     * en `senderNumberId`. Absente du numéro par défaut de la plateforme, qui ne se désigne pas.
+     * Ce n’est ni un identifiant Meta ni un credential.
+     */
+    numberId?: string
     /**
      * Poignée de désignation de l’émetteur appairé partagé, absente de l’entrée Cloud. Ce n’est
      * pas un credential : le partagé est ouvert à tout compte.

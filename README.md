@@ -177,6 +177,38 @@ await senndo.sendMessage({
 })
 ```
 
+## Choisir le numéro WhatsApp Cloud émetteur
+
+Sur `whatsapp_cloud`, `senderNumberId` désigne le numéro d'où part le message : un de vos
+numéros (`numbers[].id`) ou un numéro de la plateforme qui vous est délégué
+(`sharedSenders[].numberId`). Il décide de l'émetteur **et du prix** : votre numéro coûte la
+redevance de votre carnet, un numéro de la plateforme le prix ordinaire. Avec un modèle, le numéro
+doit appartenir à la WABA du modèle (`origin.wabaId`). Une désignation impossible est refusée en
+`422` (`SENDER_NUMBER_NOT_FOUND`, `SENDER_NUMBER_TEMPLATE_MISMATCH`) **avant tout débit**, jamais
+remplacée par un autre numéro. Sans le champ : votre numéro le plus récent, sinon le numéro par
+défaut de la plateforme.
+
+```ts
+const { numbers } = await senndo.listWaCloudNumbers()
+const { templates } = await senndo.listWaTemplates()
+const modele = templates.find((m) => m.status === 'approved' && m.origin.kind === 'own')
+const emetteur = numbers.find((n) => modele !== undefined && n.wabaId === modele.origin.wabaId)
+
+if (modele !== undefined && emetteur !== undefined) {
+  await senndo.sendMessage({
+    channel: 'whatsapp_cloud',
+    to: '+15550001111',
+    template: { name: modele.name, language: modele.language, variables: ['424242'] },
+    senderNumberId: emetteur.id,
+    idempotencyKey: `otp-${utilisateurId}-${tentative}`,
+  })
+}
+```
+
+Le devis accepte le même champ : passez-y la valeur de l'envoi réel, il cite le prix de cet
+émetteur. Quand les destinataires n'ont pas tous le même prix, la réponse porte
+`unitPriceRange` et `unitPriceUsd` vaut le plus cher — lisez `totalUsd`, ne le recalculez pas.
+
 ## Tous les canaux
 
 Le même appel sert les six canaux ; seul le contenu change.
