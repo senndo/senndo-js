@@ -195,6 +195,15 @@ export interface SendMessageBody {
    */
   senderNumberId?: string
   /**
+   * Canal "whatsapp_baileys" uniquement : votre numéro WhatsApp appairé d’où partir
+   * (`sessions[].id` de GET /v1/wa/sessions). La session doit appartenir au compte et être à
+   * l’état connected, sinon l’envoi est refusé en 403 (SENDER_SESSION_FORBIDDEN) AVANT tout
+   * débit, jamais remplacé par un autre numéro. Absent : le message part du numéro partagé de la
+   * plateforme. Ce canal est conversationnel : il ne porte ni code ni message
+   * d’authentification.
+   */
+  senderSessionId?: string
+  /**
    * Override du pays de routage, en ISO 3166-1 alpha-3 (« BRA », « JPN »). Absent, le pays est
    * DÉRIVÉ du destinataire. Un code inconnu du catalogue est refusé en 400 (COUNTRY_INVALID)
    * avant tout débit : il ne pourrait matcher aucune règle de routage, et l’envoi partirait —
@@ -1025,13 +1034,89 @@ export interface EstimateMessageBody {
    */
   channel: Channel
   /**
-   * Contenu à estimer.
+   * Destinataire unique, comme à l’envoi — numéro E.164, ou adresse sur le canal email. Équivaut
+   * à destinations: [to] : le devis est résolu sur SON pays et SON réseau. Exclusif avec
+   * destinations.
    */
-  text: string
+  to?: string
   /**
-   * Nombre de destinataires.
+   * Contenu à estimer. Requis, SAUF si media, template ou content est présent — même règle que
+   * l’envoi.
    */
-  recipients: number
+  text?: string
+  /**
+   * Nombre de destinataires. Requis seulement sans to ni destinations : quand ils sont fournis,
+   * ce sont eux qui font le nombre.
+   */
+  recipients?: number
+  /**
+   * Pièce jointe, sur les canaux whatsapp_cloud et whatsapp_baileys uniquement. Sans modèle,
+   * elle constitue le message ; avec un modèle à en-tête média, elle remplit cet en-tête. La
+   * référence provient de POST /v1/wa-media et doit appartenir au compte appelant, sinon 404.
+   */
+  media?: {
+    /**
+     * Référence opaque rendue par POST /v1/wa-media.
+     */
+    ref?: string
+  }
+  /**
+   * Modèle WhatsApp managé, REQUIS sur le canal whatsapp_cloud hors fenêtre de 24 h : WhatsApp
+   * n’accepte un texte libre que si le destinataire vous a écrit dans les 24 heures. Désignez-le
+   * par name (+ language si le nom existe en plusieurs langues) ou par id. L’appartenance du
+   * modèle au compte et son statut « approuvé » sont vérifiés avant tout débit. Les variables
+   * sont positionnelles ; un modèle à en-tête média prend sa pièce jointe via le champ media.
+   */
+  template?: {
+    /**
+     * Nom du modèle approuvé, tel qu’il s’affiche dans la console (par exemple
+     * official_otp_code_template). Exclusif avec id. Un nom introuvable, ou ambigu après
+     * application de la précédence, est refusé avant tout débit.
+     */
+    name?: string
+    /**
+     * Langue du modèle (fr, en, en_US…), à préciser seulement quand le nom existe en plusieurs
+     * langues — le refus TEMPLATE_LANGUAGE_REQUIRED énumère alors celles qui existent. Ne se
+     * combine qu’avec name.
+     */
+    language?: string
+    /**
+     * Identifiant du modèle approuvé (UUID). Exclusif avec name.
+     */
+    id?: string
+    /**
+     * Valeurs des variables positionnelles du corps, dans l’ordre. Défaut : [].
+     */
+    variables?: Array<string>
+    /**
+     * Valeur de la variable d’en-tête texte, si le modèle en déclare une.
+     */
+    headerVariable?: string
+    /**
+     * Valeur du bouton URL dynamique ({{1}} dans l’URL approuvée), si le modèle en porte un.
+     * Requise dans ce cas, refusée sinon.
+     */
+    urlButtonVariable?: string
+  }
+  /**
+   * Modèle hébergé, REQUIS sur le canal whatsapp_twilio (et refusé ailleurs) : ce canal n’envoie
+   * que des modèles approuvés auprès du partenaire d’acheminement — un texte libre y est refusé
+   * AVANT tout débit (CONTENT_REQUIRED). Collez l’identifiant opaque du modèle (préfixe HX) et
+   * ses variables nommées. Un identifiant que le partenaire ne connaît pas est refusé avant tout
+   * débit (CONTENT_NOT_FOUND).
+   */
+  content?: {
+    /**
+     * Identifiant opaque du modèle approuvé auprès du partenaire d’acheminement (préfixe HX, 34
+     * caractères).
+     */
+    sid?: string
+    /**
+     * Variables du modèle, par nom ("1", "2", … pour les positionnelles), valeurs en chaînes.
+     * Défaut : {}.
+     */
+    variables?: Record<string, unknown>
+  }
   /**
    * Expéditeur envisagé — il participe à la résolution de la route.
    */
@@ -1078,11 +1163,12 @@ export interface EstimateMessageBody {
   destinations?: Array<string>
   /**
    * Identifiant du modèle WhatsApp de l’envoi (canal "whatsapp_cloud" uniquement) — DOIT valoir
-   * celui de l’envoi réel. Le modèle décide de l’émetteur, donc du prix : un modèle de votre
-   * compte WhatsApp Business part de votre numéro et coûte la redevance de votre carnet, un
-   * modèle partagé de senndo part du numéro partagé au prix ordinaire. Absent : devis d’un envoi
-   * libre, depuis votre numéro si vous en avez un. Un modèle que votre compte ne peut pas
-   * envoyer est refusé en 404 (TEMPLATE_NOT_FOUND).
+   * celui de l’envoi réel. Forme historique du devis, exclusive avec template. Le modèle décide
+   * de l’émetteur, donc du prix : un modèle de votre compte WhatsApp Business part de votre
+   * numéro et coûte la redevance de votre carnet, un modèle partagé de senndo part du numéro
+   * partagé au prix ordinaire. Absent : devis d’un envoi libre, depuis votre numéro si vous en
+   * avez un. Un modèle que votre compte ne peut pas envoyer est refusé en 404
+   * (TEMPLATE_NOT_FOUND).
    */
   templateId?: string
   /**
@@ -1281,9 +1367,9 @@ export type ListLedgerResponse = {
      */
     status: string | null
     /**
-     * Référence de paiement (SENNDO-AAMMJJ-N) quand l’écriture EST une recharge — c’est la clé du
-     * reçu. Null partout ailleurs, y compris sur la ligne de bonus, qui partage la référence du
-     * crédit principal.
+     * Référence de paiement (PAY-AAMMJJ-N, SENNDO-AAMMJJ-N avant le 2026-10-07) quand l’écriture
+     * EST une recharge — c’est la clé du reçu. Null partout ailleurs, y compris sur la ligne de
+     * bonus, qui partage la référence du crédit principal.
      */
     receiptRef?: string | null
   }>
@@ -1670,6 +1756,25 @@ export type ListWaCloudNumbersResponse = {
   }>
 }
 
+/** Réponse 200 de `GET /v1/wa/sessions`. */
+export type ListWaSessionsResponse = {
+  sessions: Array<{
+    /**
+     * Identifiant de la session, à passer en senderSessionId.
+     */
+    id: string
+    /**
+     * État de la session. Seule une session connected peut envoyer ; pairing attend le scan du QR
+     * dans la console, disconnected et banned refusent l’envoi en 403.
+     */
+    state: 'pairing' | 'connected' | 'disconnected' | 'banned'
+    /**
+     * Numéro appairé, tel que le destinataire le voit ; null tant que l’appairage n’a pas abouti.
+     */
+    pairedNumber: string | null
+  }>
+}
+
 /** Réponse 200 de `GET /v1/channels/whatsapp_twilio/credentials`. */
 export type GetRoutingCredentialsResponse = {
   /**
@@ -1767,7 +1872,9 @@ export interface CreateWebhookBody {
    */
   name: string
   /**
-   * URL http(s) que nous appellerons.
+   * URL https que nous appellerons. Refusée (422) si elle n’est pas en https, ou si son hôte est
+   * une adresse du réseau interne, loopback, lien local, ou un nom sans domaine. La même garde
+   * rejoue à chaque livraison sur l’adresse résolue.
    */
   url: string
   /**
@@ -2105,7 +2212,7 @@ export const OPERATIONS = {
     pathParams: [],
     queryParams: [],
     requiredQueryParams: [],
-    requiredBodyFields: ['channel', 'text', 'recipients'],
+    requiredBodyFields: ['channel'],
     contentType: 'application/json',
     successStatus: '200',
     billableSideEffect: false,
@@ -2162,6 +2269,18 @@ export const OPERATIONS = {
     operationId: 'listWaCloudNumbers',
     method: 'GET',
     path: '/v1/wa-cloud/numbers',
+    pathParams: [],
+    queryParams: [],
+    requiredQueryParams: [],
+    requiredBodyFields: [],
+    contentType: null,
+    successStatus: '200',
+    billableSideEffect: false,
+  },
+  listWaSessions: {
+    operationId: 'listWaSessions',
+    method: 'GET',
+    path: '/v1/wa/sessions',
     pathParams: [],
     queryParams: [],
     requiredQueryParams: [],
@@ -2268,6 +2387,7 @@ export const OPERATION_IDS = [
   'listInboxMessages',
   'listWaTemplates',
   'listWaCloudNumbers',
+  'listWaSessions',
   'getRoutingCredentials',
   'listContentTemplates',
   'listWebhooks',

@@ -45,6 +45,7 @@ import type {
   GetRoutingCredentialsResponse,
   ListContentTemplatesResponse,
   ListWaCloudNumbersResponse,
+  ListWaSessionsResponse,
   ListWaTemplatesResponse,
   CreateVerificationBody,
   CreateVerificationResponse,
@@ -70,7 +71,7 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_RETRIES = 2
 
 /** La version du paquet, injectée ici et vérifiée contre `package.json` par un test. */
-export const SDK_VERSION = '1.5.0'
+export const SDK_VERSION = '1.6.0'
 
 export class SenndoClient {
   readonly #config: TransportConfig
@@ -387,6 +388,14 @@ export class SenndoClient {
       { descriptor: OPERATIONS.listWaCloudNumbers },
       options,
     )
+  }
+
+  /**
+   * Les numéros WhatsApp appairés du compte (canal `whatsapp_baileys`) : l'`id` d'une session
+   * `connected` est le `senderSessionId` d'un envoi depuis votre propre numéro.
+   */
+  async listWaSessions(options?: RequestOptions): Promise<ListWaSessionsResponse> {
+    return this.#call<ListWaSessionsResponse>({ descriptor: OPERATIONS.listWaSessions }, options)
   }
 
   /**

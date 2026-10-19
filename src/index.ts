@@ -80,6 +80,7 @@ export type {
   GetRoutingCredentialsResponse,
   ListContentTemplatesResponse,
   ListWaCloudNumbersResponse,
+  ListWaSessionsResponse,
   ListWaTemplatesResponse,
   ListWebhookDeliveriesQuery,
   ListWebhookDeliveriesResponse,
