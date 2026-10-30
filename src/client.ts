@@ -71,7 +71,7 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_RETRIES = 2
 
 /** La version du paquet, injectée ici et vérifiée contre `package.json` par un test. */
-export const SDK_VERSION = '1.6.0'
+export const SDK_VERSION = '1.7.0'
 
 export class SenndoClient {
   readonly #config: TransportConfig
